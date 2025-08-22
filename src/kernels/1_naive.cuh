@@ -13,8 +13,8 @@ Matrix sizes: MxN
 
 __global__ void conv2d_naive(int M, int N, const double *A,
                             double *B) {
-  const uint i = blockIdx.x * blockDim.x + threadIdx.x;
-  const uint j = blockIdx.y * blockDim.y + threadIdx.y;
+  const int i = blockIdx.x * blockDim.x + threadIdx.x;
+  const int j = blockIdx.y * blockDim.y + threadIdx.y;
   double filter[9] = {-1.0, -1.0, -1.0,
           -1.0, 8.0, -1.0,
           -1.0, -1.0, -1.0};

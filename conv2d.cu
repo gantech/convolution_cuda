@@ -49,9 +49,7 @@ int main(int argc, char **argv) {
   long m, n, max_size;
   max_size = SIZE[SIZE.size() - 1];
   std::cout << "Max size: " << max_size << std::endl;
-
-  double alpha = 0.5, beta = 3.0; // GEMM input parameters, C=α*AB+β*C
-
+  
   double *A = nullptr, *B = nullptr, 
         *B_ref = nullptr; // host matrices
   double *dA = nullptr, *dB = nullptr, 
@@ -82,7 +80,7 @@ int main(int argc, char **argv) {
     // Verify the correctness of the calculation, and execute it once before the
     // kernel function timing to avoid cold start errors
     if (kernel_num != 0) {
-      run_kernel(0, m, n, dA, dB, dB_ref); // cuDNN
+      run_kernel(0, m, n, dA, dB); // cuDNN
       run_kernel(kernel_num, m, n, dA, dB); // Executes the kernel, modifies the result matrix
       cudaCheck(cudaDeviceSynchronize());
       cudaCheck(cudaGetLastError()); // Check for async errors during kernel run
@@ -102,10 +100,8 @@ int main(int argc, char **argv) {
           print_matrix(A, m, n, fs);
           fs << "B:\n";
           print_matrix(B, m, n, fs);
-          fs << "C:\n";
-          print_matrix(C, m, n, fs);
           fs << "Should:\n";
-          print_matrix(C_ref, m, n, fs);
+          print_matrix(B_ref, m, n, fs);
         }
         exit(EXIT_FAILURE);
       }
@@ -122,7 +118,7 @@ int main(int argc, char **argv) {
     cudaEventElapsedTime(&elapsed_time, beg, end);
     elapsed_time /= 1000.; // Convert to seconds
 
-    long flops = 2 * m * n * k;
+    long flops = 9 * m * n;
     printf(
         "Average elapsed time: (%7.6f) s, performance: (%7.1f) GFLOPS. size: "
         "(%ld).\n",
@@ -142,7 +138,6 @@ int main(int argc, char **argv) {
   cudaFree(dA);
   cudaFree(dB);
   cudaFree(dB_ref);
-  cublasDestroy(handle);
 
   return 0;
 };
