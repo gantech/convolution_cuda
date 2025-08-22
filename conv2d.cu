@@ -80,7 +80,7 @@ int main(int argc, char **argv) {
     // Verify the correctness of the calculation, and execute it once before the
     // kernel function timing to avoid cold start errors
     if (kernel_num != 0) {
-      run_kernel(0, m, n, dA, dB); // cuDNN
+      run_kernel(0, m, n, dA, dB_ref); // cuDNN
       run_kernel(kernel_num, m, n, dA, dB); // Executes the kernel, modifies the result matrix
       cudaCheck(cudaDeviceSynchronize());
       cudaCheck(cudaGetLastError()); // Check for async errors during kernel run
