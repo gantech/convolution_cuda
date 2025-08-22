@@ -121,7 +121,11 @@ void runCuDNNFP64(int H, int W, double *d_input, double *d_output) {
     double alpha = 1.0f; // Scaling factor for the result
     double beta = 0.0f;  // Scaling factor for the output (for accumulation)
 
-    checkCUDNN(cudnnConvolutionForward(cudnn,
+
+    cudaEventRecord(beg);
+    for (int j = 0; j < 50; j++) {
+      // We don't reset dC between runs to save time
+      checkCUDNN(cudnnConvolutionForward(cudnn,
                                        &alpha,
                                        inputDescriptor,
                                        d_input,
@@ -135,5 +139,21 @@ void runCuDNNFP64(int H, int W, double *d_input, double *d_output) {
                                        outputDescriptor,
                                        d_output));        
 
+    }
+    cudaEventRecord(end);
+    cudaEventSynchronize(beg);
+    cudaEventSynchronize(end);
+    cudaEventElapsedTime(&elapsed_time, beg, end);
+    elapsed_time /= 1000.; // Convert to seconds
+
+    long flops = 9 * H * W;
+    printf(
+        "Average elapsed time: (%7.6f) s, performance: (%7.1f) GFLOPS. size: "
+        "(%ld).\n",
+        elapsed_time / 50,
+        (50 * flops * 1e-9) / elapsed_time, m);
+    fflush(stdout);
+
+    
 
 }

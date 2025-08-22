@@ -107,28 +107,32 @@ int main(int argc, char **argv) {
       }
     }
 
-    cudaEventRecord(beg);
-    for (int j = 0; j < repeat_times; j++) {
-      // We don't reset dC between runs to save time
+    if (kernel_num == 0)
       run_kernel(kernel_num, m, n, dA, dB);
-    }
-    cudaEventRecord(end);
-    cudaEventSynchronize(beg);
-    cudaEventSynchronize(end);
-    cudaEventElapsedTime(&elapsed_time, beg, end);
-    elapsed_time /= 1000.; // Convert to seconds
+    else {
+      cudaEventRecord(beg);
+      for (int j = 0; j < repeat_times; j++) {
+        // We don't reset dC between runs to save time
+        run_kernel(kernel_num, m, n, dA, dB);
+      }
+      cudaEventRecord(end);
+      cudaEventSynchronize(beg);
+      cudaEventSynchronize(end);
+      cudaEventElapsedTime(&elapsed_time, beg, end);
+      elapsed_time /= 1000.; // Convert to seconds
 
-    long flops = 9 * m * n;
-    printf(
-        "Average elapsed time: (%7.6f) s, performance: (%7.1f) GFLOPS. size: "
-        "(%ld).\n",
-        elapsed_time / repeat_times,
-        (repeat_times * flops * 1e-9) / elapsed_time, m);
-    fflush(stdout);
-    // make dB and dB_ref equal again (we modified dB while calling our kernel
-    // for benchmarking)
-    cudaCheck(cudaMemcpy(dB, dB_ref, sizeof(double) * m * n,
-                         cudaMemcpyDeviceToDevice));
+      long flops = 9 * m * n;
+      printf(
+          "Average elapsed time: (%7.6f) s, performance: (%7.1f) GFLOPS. size: "
+          "(%ld).\n",
+          elapsed_time / repeat_times,
+          (repeat_times * flops * 1e-9) / elapsed_time, m);
+      fflush(stdout);
+      // make dB and dB_ref equal again (we modified dB while calling our kernel
+      // for benchmarking)
+      cudaCheck(cudaMemcpy(dB, dB_ref, sizeof(double) * m * n,
+                          cudaMemcpyDeviceToDevice));
+    }
   }
 
   // Free up CPU and GPU space
