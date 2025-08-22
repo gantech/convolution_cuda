@@ -23,14 +23,7 @@ include_directories(${PROJECT_SOURCE_DIR}/src)
 aux_source_directory(${PROJECT_SOURCE_DIR}/src SRC)
 
 # generate executable
-add_executable(dgemm dgemm.cu ${SRC})
-set_target_properties(dgemm PROPERTIES CUDA_ARCHITECTURES ${CUDA_COMPUTE_CAPABILITY})
-target_link_libraries(dgemm ${CUDA_LIBRARIES} ${CUDA_CUBLAS_LIBRARIES})
+add_executable(conv2d conv2d.cu ${SRC})
+set_target_properties(conv2d PROPERTIES CUDA_ARCHITECTURES ${CUDA_COMPUTE_CAPABILITY})
+target_link_libraries(conv2d ${CUDA_LIBRARIES} ${CUDA_CUBLAS_LIBRARIES})
 
-add_executable(cuBLAS_dgemm cuBLAS_dgemm.cu )
-set_target_properties(dgemm PROPERTIES CUDA_ARCHITECTURES ${CUDA_COMPUTE_CAPABILITY})
-target_link_libraries(cuBLAS_dgemm ${CUDA_LIBRARIES} ${CUDA_CUBLAS_LIBRARIES})
-
-add_executable(simplest_kernel simplest_kernel.cu)
-set_target_properties(dgemm PROPERTIES CUDA_ARCHITECTURES ${CUDA_COMPUTE_CAPABILITY})
-target_link_libraries(simplest_kernel ${CUDA_LIBRARIES})

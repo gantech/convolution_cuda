@@ -121,12 +121,6 @@ int div_ceil(int numerator, int denominator) {
   return res.rem ? (res.quot + 1) : res.quot;
 }
 
-void runCuDNNFP64(cublasHandle_t handle, int M, int N, int K, double alpha,
-                   double *A, double *B, double beta, double *C) {
-
-}
-
-
 void run_conv2d_naive(int M, int N, double *A, double *B) {
   dim3 gridDim(CEIL_DIV(M, 32), CEIL_DIV(N, 32));
   dim3 blockDim(32, 32);
