@@ -8,8 +8,8 @@
 
 template <const uint BLOCKSIZE>
 __global__ void conv2d_global_mem_coalesce(int M, int N, const double *A, double *B) {
-  const int cRow = blockIdx.x * BLOCKSIZE + threadIdx.y;
-  const int cCol = blockIdx.y * BLOCKSIZE + threadIdx.x;
+  const int i = blockIdx.x * BLOCKSIZE + threadIdx.y;
+  const int j = blockIdx.y * BLOCKSIZE + threadIdx.x;
 
   double filter[9] = {-1.0, -1.0, -1.0,
           -1.0, 8.0, -1.0,
