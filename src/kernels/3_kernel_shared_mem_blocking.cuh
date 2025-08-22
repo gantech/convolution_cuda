@@ -38,7 +38,7 @@ __global__ void conv2d_shared_mem_block(int M, int N,
     As[0] = ( (cRow > 0) && (cCol > 0) ) ? A[-N-1] : 0;
 
   if (threadIdx.x == 1) // Bottom right
-    As[BLOCKSIZE + 1] = ( (cRow > 0) && (cCol * BLOCKSIZE < N) )? A[-N + BLOCKSIZE] : 0;
+    As[BLOCKSIZE + 1] = ( (cRow > 0) && ((cCol+1) * BLOCKSIZE < N) )? A[-N + BLOCKSIZE] : 0;
 
   if (threadIdx.x == 2) // Top left
     As[(BLOCKSIZE+1) * (BLOCKSIZE + 2)] = (((cRow+1) * BLOCKSIZE < M) && (cCol > 0) )? A[ (BLOCKSIZE * N) - 1] : 0;
@@ -68,7 +68,7 @@ __global__ void conv2d_shared_mem_block(int M, int N,
   }
 
   __syncthreads();
-  
+
   B[threadRow * N + threadCol] = tmp;
 
 }
