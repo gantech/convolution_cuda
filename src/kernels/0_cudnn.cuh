@@ -121,6 +121,12 @@ void runCuDNNFP64(int H, int W, double *d_input, double *d_output) {
     double alpha = 1.0f; // Scaling factor for the result
     double beta = 0.0f;  // Scaling factor for the output (for accumulation)
 
+    // Using cudaEvent for gpu stream timing, cudaEvent is equivalent to
+    // publishing event tasks in the target stream
+    float elapsed_time;
+    cudaEvent_t beg, end;
+    cudaEventCreate(&beg);
+    cudaEventCreate(&end);
 
     cudaEventRecord(beg);
     for (int j = 0; j < 50; j++) {
