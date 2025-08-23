@@ -12,8 +12,8 @@ template <const int BLOCKSIZE>
 __global__ void conv2d_shared_mem_block(int M, int N, 
                                        const double *A, double *B) {
   // the output block that we want to compute in this threadblock
-  const uint cRow = blockIdx.x;
-  const uint cCol = blockIdx.y;
+  const uint cRow = blockIdx.y;
+  const uint cCol = blockIdx.x;
 
   double filter[9] = {-1.0, -1.0, -1.0,
           -1.0, 8.0, -1.0,
