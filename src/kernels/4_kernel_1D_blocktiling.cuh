@@ -29,10 +29,6 @@ __global__ void conv2d1DBlocktiling(int M, int N, const double *A, double *B) {
   // shared mem is shared between all threads in a block
   __shared__ double As[(BM + 2) * (BN + 2)];
 
-  // the inner row & col that we're accessing in this thread
-  const uint threadCol = threadIdx.x % BN;
-  const uint threadRow = threadIdx.x / BN;
-
   // Each block loads (BM+2) x (BN+2) elements into shared memory
   for (int i = threadIdx.x; i < (BM+2)*(BN+2); i += blockDim.x) {
     int smem_row = i / (BN+2);
@@ -64,7 +60,7 @@ __global__ void conv2d1DBlocktiling(int M, int N, const double *A, double *B) {
   }
 
   // advance pointers to the starting positions
-  B += (cRow * BLOCKSIZE) * N + cCol * BLOCKSIZE;
+  B += (cRow * BM) * N + cCol * BN;
   for (int ti = 0; ti < TM; ti++) {
       B[(threadRow * TM + ti) * N + threadCol] = threadResults[ti];
   }
