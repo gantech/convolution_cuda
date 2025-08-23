@@ -28,40 +28,19 @@ __global__ void conv2d_shared_mem_block(int M, int N,
   const uint threadRow = threadIdx.x / BLOCKSIZE;
 
   // advance pointers to the starting positions
-  const double *Aorig = A;
-  A += (cRow * BLOCKSIZE) * N + cCol * BLOCKSIZE; // row=cRow, col=cCol
   B += (cRow * BLOCKSIZE) * N + cCol * BLOCKSIZE;
 
-  As[(threadRow + 1) * (BLOCKSIZE + 2) + (threadCol + 1)] = A[threadRow * N + threadCol];
-
-  bool check_bot = (cRow > 0);
-  bool check_left = (cCol > 0);
-  bool check_top = (cRow + 1) * BLOCKSIZE < M;
-  bool check_right = (cCol + 1) * BLOCKSIZE < N;
-  // Now the padding
-  if (threadIdx.x == 0) // Bottom left
-    As[0] = (check_bot && check_left) ? A[-N-1] : 0;
-
-  if (threadIdx.x == 1) // Bottom right
-    As[BLOCKSIZE + 1] = (check_bot && check_right)? A[-N + BLOCKSIZE] : 0;
-
-  if (threadIdx.x == 2) // Top left
-    As[(BLOCKSIZE+1) * (BLOCKSIZE + 2)] = (check_top && check_left) ? A[ (BLOCKSIZE * N) - 1] : 0;
-
-  if (threadIdx.x == 3) // Top right
-    As[(BLOCKSIZE + 1) * (BLOCKSIZE + 2) + (BLOCKSIZE + 1)] = ( check_top && check_right ) ? A[ (BLOCKSIZE * N) + BLOCKSIZE] : 0;
-
-  if (threadRow == 0) { // Bottom
-    As[threadCol + 1] = check_bot ? Aorig[ (cRow * BLOCKSIZE) * N + cCol * BLOCKSIZE - N + threadCol] : 0;
-  } else if (threadRow == (BLOCKSIZE - 1) ) { // Top
-    As[(BLOCKSIZE + 1) * (BLOCKSIZE + 2) + (threadCol + 1)] = check_top ? A[ (threadRow+1)*N + threadCol] : 0;
+  // Each block loads (BLOCKSIZE+2) x (BLOCKSIZE+2) elements into shared memory
+  for (int i = threadIdx.x; i < (BLOCKSIZE+2)*(BLOCKSIZE+2); i += blockDim.x) {
+    int smem_row = i / (BLOCKSIZE+2);
+    int smem_col = i % (BLOCKSIZE+2);
+    int g_row = cRow * BLOCKSIZE + smem_row - 1;
+    int g_col = cCol * BLOCKSIZE + smem_col - 1;
+    if (g_row >= 0 && g_row < M && g_col >= 0 && g_col < N)
+        As[smem_row * (BLOCKSIZE+2) + smem_col] = A[g_row * N + g_col];
+    else
+        As[smem_row * (BLOCKSIZE+2) + smem_col] = 0.0;
   }
-
-   if (threadCol == 0) { // Left
-     As[(threadRow + 1) * (BLOCKSIZE + 2)] = check_left ? Aorig[(cRow * BLOCKSIZE) * N + cCol * BLOCKSIZE + threadRow * N - 1] : 0;
-   } else if (threadCol == (BLOCKSIZE - 1)) { // Right
-     As[(threadRow + 1) * (BLOCKSIZE + 2) + (BLOCKSIZE + 1)] = check_right ? Aorig[(cRow * BLOCKSIZE) * N + cCol * BLOCKSIZE + threadRow * N + BLOCKSIZE] : 0;
-   }
 
   __syncthreads();
   
@@ -71,8 +50,6 @@ __global__ void conv2d_shared_mem_block(int M, int N,
         tmp += As[(threadRow + fi + 1) * (BLOCKSIZE + 2) + (threadCol + fj + 1)] * filter[(fi + 1) * 3 + (fj + 1)];
     }
   }
-
-  __syncthreads();
 
   B[threadRow * N + threadCol] = tmp;
 
