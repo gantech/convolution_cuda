@@ -12,8 +12,8 @@ template <const int BLOCKSIZE>
 __global__ void conv2d_shared_mem_block(int M, int N, 
                                        const double *A, double *B) {
   // the output block that we want to compute in this threadblock
-  const uint cRow = blockIdx.y;
-  const uint cCol = blockIdx.x;
+  const uint cRow = blockIdx.x;
+  const uint cCol = blockIdx.y;
 
   double filter[9] = {-1.0, -1.0, -1.0,
           -1.0, 8.0, -1.0,
@@ -28,38 +28,43 @@ __global__ void conv2d_shared_mem_block(int M, int N,
   const uint threadRow = threadIdx.x / BLOCKSIZE;
 
   // advance pointers to the starting positions
+  const double *Aorig = A;
   A += (cRow * BLOCKSIZE) * N + cCol * BLOCKSIZE; // row=cRow, col=cCol
   B += (cRow * BLOCKSIZE) * N + cCol * BLOCKSIZE;
 
   As[(threadRow + 1) * (BLOCKSIZE + 2) + (threadCol + 1)] = A[threadRow * N + threadCol];
 
+  bool check_bot = (cRow > 0);
+  bool check_left = (cCol > 0);
+  bool check_top = (cRow + 1) * BLOCKSIZE < M;
+  bool check_right = (cCol + 1) * BLOCKSIZE < N;
   // Now the padding
   if (threadIdx.x == 0) // Bottom left
-    As[0] = ( (cRow > 0) && (cCol > 0) ) ? A[-N-1] : 0;
+    As[0] = (check_bot && check_left) ? A[-N-1] : 0;
 
   if (threadIdx.x == 1) // Bottom right
-    As[BLOCKSIZE + 1] = ( (cRow > 0) && ((cCol+1) * BLOCKSIZE < N) )? A[-N + BLOCKSIZE] : 0;
+    As[BLOCKSIZE + 1] = (check_bot && check_right)? A[-N + BLOCKSIZE] : 0;
 
   if (threadIdx.x == 2) // Top left
-    As[(BLOCKSIZE+1) * (BLOCKSIZE + 2)] = (((cRow+1) * BLOCKSIZE < M) && (cCol > 0) )? A[ (BLOCKSIZE * N) - 1] : 0;
+    As[(BLOCKSIZE+1) * (BLOCKSIZE + 2)] = (check_top && check_left) ? A[ (BLOCKSIZE * N) - 1] : 0;
 
   if (threadIdx.x == 3) // Top right
-    As[(BLOCKSIZE + 1) * (BLOCKSIZE + 2) + (BLOCKSIZE + 1)] = ( ((cRow+1) * BLOCKSIZE < M) && ((cCol + 1) * BLOCKSIZE < N) ) ? A[ (BLOCKSIZE * N) + BLOCKSIZE] : 0;
+    As[(BLOCKSIZE + 1) * (BLOCKSIZE + 2) + (BLOCKSIZE + 1)] = ( check_top && check_right ) ? A[ (BLOCKSIZE * N) + BLOCKSIZE] : 0;
 
   if (threadRow == 0) { // Bottom
-    As[threadCol + 1] = (cRow > 0) ? A[-N + threadCol] : 0;
+    As[threadCol + 1] = check_bot ? Aorig[ (cRow * BLOCKSIZE) * N + cCol * BLOCKSIZE - N + threadCol] : 0;
   } else if (threadRow == (BLOCKSIZE - 1) ) { // Top
-    As[(BLOCKSIZE + 1) * (BLOCKSIZE + 2) + (threadCol + 1)] = (((cRow+1) * BLOCKSIZE < M) ? A[ threadRow + N + threadCol] : 0);
+    As[(BLOCKSIZE + 1) * (BLOCKSIZE + 2) + (threadCol + 1)] = check_top ? A[ (threadRow+1)*N + threadCol] : 0;
   }
 
-  if (threadCol == 0) { // Left
-    As[(threadRow + 1) * (BLOCKSIZE + 2)] = (cCol > 0) ? A[threadRow * N - 1] : 0;
-  } else if (threadCol == (BLOCKSIZE - 1)) { // Right
-    As[(threadRow + 1) * (BLOCKSIZE + 2) + (BLOCKSIZE + 1)] = ((cCol+1) * BLOCKSIZE < N) ? A[threadRow * N + BLOCKSIZE] : 0;
-  }
+   if (threadCol == 0) { // Left
+     As[(threadRow + 1) * (BLOCKSIZE + 2)] = check_left ? Aorig[(cRow * BLOCKSIZE) * N + cCol * BLOCKSIZE + threadRow * N - 1] : 0;
+   } else if (threadCol == (BLOCKSIZE - 1)) { // Right
+     As[(threadRow + 1) * (BLOCKSIZE + 2) + (BLOCKSIZE + 1)] = check_right ? Aorig[(cRow * BLOCKSIZE) * N + cCol * BLOCKSIZE + threadRow * N + BLOCKSIZE] : 0;
+   }
 
   __syncthreads();
-
+  
   double tmp = 0.0;
   for (int fi = -1 ; fi < 2; fi++) {
     for (int fj = -1; fj < 2; fj++) { 
