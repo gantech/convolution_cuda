@@ -157,7 +157,6 @@ void runConv2d1DBlocktiling(int M, int N, double *A, double *B) {
 }
 
 void runConv2d2DBlocktiling(int M, int N, double *A, double *B) {
-  const uint BK = 8;
   const uint TM = 8;
   const uint TN = 8;
   if (M >= 128 and N >= 128) {
@@ -165,7 +164,7 @@ void runConv2d2DBlocktiling(int M, int N, double *A, double *B) {
     const uint BN = 128;
     dim3 gridDim(CEIL_DIV(N, BN), CEIL_DIV(M, BM));
     dim3 blockDim((BM * BN) / (TM * TN));
-    conv2d2DBlocktiling<BM, BN, BK, TM, TN>
+    conv2d2DBlocktiling<BM, BN, TM, TN>
         <<<gridDim, blockDim>>>(M, N, A, B);
   } else {
     // this is a hacky solution to the underlying problem
@@ -174,7 +173,7 @@ void runConv2d2DBlocktiling(int M, int N, double *A, double *B) {
     const uint BN = 64;
     dim3 gridDim(CEIL_DIV(N, BN), CEIL_DIV(M, BM));
     dim3 blockDim((BM * BN) / (TM * TN));
-    conv2d2DBlocktiling<BM, BN, BK, TM, TN>
+    conv2d2DBlocktiling<BM, BN, TM, TN>
         <<<gridDim, blockDim>>>(M, N, A, B);
   }
 }
