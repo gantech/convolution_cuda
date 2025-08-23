@@ -33,16 +33,16 @@ __global__ void conv2d1DBlocktiling(int M, int N, const double *A, double *B) {
   const uint threadCol = threadIdx.x % BN;
   const uint threadRow = threadIdx.x / BN;
 
-  // Each block loads (BLOCKSIZE+2) x (BLOCKSIZE+2) elements into shared memory
-  for (int i = threadIdx.x; i < (BLOCKSIZE+2)*(BLOCKSIZE+2); i += blockDim.x) {
-    int smem_row = i / (BLOCKSIZE+2);
-    int smem_col = i % (BLOCKSIZE+2);
-    int g_row = cRow * BLOCKSIZE + smem_row - 1;
-    int g_col = cCol * BLOCKSIZE + smem_col - 1;
+  // Each block loads (BM+2) x (BN+2) elements into shared memory
+  for (int i = threadIdx.x; i < (BM+2)*(BN+2); i += blockDim.x) {
+    int smem_row = i / (BN+2);
+    int smem_col = i % (BN+2);
+    int g_row = cRow * BN + smem_row - 1;
+    int g_col = cCol * BN + smem_col - 1;
     if (g_row >= 0 && g_row < M && g_col >= 0 && g_col < N)
-        As[smem_row * (BLOCKSIZE+2) + smem_col] = A[g_row * N + g_col];
+        As[smem_row * (BN+2) + smem_col] = A[g_row * N + g_col];
     else
-        As[smem_row * (BLOCKSIZE+2) + smem_col] = 0.0;
+        As[smem_row * (BN+2) + smem_col] = 0.0;
   }
 
   __syncthreads();
