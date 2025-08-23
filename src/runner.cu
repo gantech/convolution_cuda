@@ -147,13 +147,12 @@ void run_conv2d_shared_mem_block(int M, int N, double *A, double *B) {
 void runConv2d1DBlocktiling(int M, int N, double *A, double *B) {
   const uint BM = 64;
   const uint BN = 64;
-  const uint BK = 8;
   const uint TM = 8;
   dim3 gridDim(CEIL_DIV(N, BN), CEIL_DIV(M, BM));
   // There are BM * BN elements to be calculated by this block 
   // by BM * BN / TM threads such that each thread calculates TM elements.
   dim3 blockDim((BM * BN) / TM);
-  conv2d1DBlocktiling<BM, BN, BK, TM>
+  conv2d1DBlocktiling<BM, BN, TM>
       <<<gridDim, blockDim>>>(M, N, A, B);
 }
 
