@@ -17,6 +17,9 @@
 #include <cassert>
 #include <cuda/barrier>
 
+using barrier = cuda::barrier<cuda::thread_scope_block>;
+namespace cde = cuda::device::experimental;
+
 #define cudaCheck2(err) (cudaCheck(err, __FILE__, __LINE__))
 
 #define CEIL_DIV(M, N) (((M) + (N)-1) / (N))
@@ -36,10 +39,6 @@ __global__ void conv2d_shared_mem_block(const __grid_constant__ CUtensorMap tens
   // the output block that we want to compute in this threadblock
   const uint cRow = blockIdx.y;
   const uint cCol = blockIdx.x;
-  
-  // Need to include cooperative groups for block synchronization
-  namespace cg = cooperative_groups;
-  auto block = cg::this_thread_block();
 
   double filter[9] = {-1.0, -1.0, -1.0,
           -1.0, 8.0, -1.0,
