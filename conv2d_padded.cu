@@ -3,12 +3,26 @@
 #include <ctime>
 #include <fstream>
 #include <iostream>
-#include <runner.cuh>
 #include <vector>
+#include <cuda_runtime.h>
+#include <fstream>
+#include <stdio.h>
+#include <stdlib.h>
+#include <sys/time.h>
+#include <time.h>
+#include <unistd.h>
 
-#define cudaCheck(err) (cudaCheck(err, __FILE__, __LINE__))
+#define cudaCheck2(err) (cudaCheck(err, __FILE__, __LINE__))
 
 #define CEIL_DIV(M, N) (((M) + (N)-1) / (N))
+
+void cudaCheck(cudaError_t error, const char *file, int line) {
+  if (error != cudaSuccess) {
+    printf("[CUDA ERROR] at file %s:%d:\n%s\n", file, line,
+           cudaGetErrorString(error));
+    exit(EXIT_FAILURE);
+  }
+};
 
 template <const int BLOCKSIZE>
 __global__ void conv2d_shared_mem_block(int M, int N, 
@@ -82,15 +96,15 @@ int main(int argc, char **argv) {
 
   randomize_matrix(A, (M+2) * (N+2));
 
-  cudaCheck(cudaMalloc((void **)&dA, sizeof(double) * (M+2) * (N+2)));
-  cudaCheck(cudaMalloc((void **)&dB, sizeof(double) * (M+2) * (N+2)));
-  cudaCheck(cudaMalloc((void **)&dB_ref, sizeof(double) * (M+2) * (N+2)));
+  cudaCheck2(cudaMalloc((void **)&dA, sizeof(double) * (M+2) * (N+2)));
+  cudaCheck2(cudaMalloc((void **)&dB, sizeof(double) * (M+2) * (N+2)));
+  cudaCheck2(cudaMalloc((void **)&dB_ref, sizeof(double) * (M+2) * (N+2)));
 
-  cudaCheck(cudaMemcpy(dA, A, sizeof(double) * (M+2) * (N+2),
+  cudaCheck2(cudaMemcpy(dA, A, sizeof(double) * (M+2) * (N+2),
                        cudaMemcpyHostToDevice));
-  cudaCheck(cudaMemcpy(dB, B, sizeof(double) * (M+2) * (N+2),
+  cudaCheck2(cudaMemcpy(dB, B, sizeof(double) * (M+2) * (N+2),
                        cudaMemcpyHostToDevice));
-  cudaCheck(cudaMemcpy(dB_ref, B_ref, sizeof(double) * (M+2) * (N+2),
+  cudaCheck2(cudaMemcpy(dB_ref, B_ref, sizeof(double) * (M+2) * (N+2),
                        cudaMemcpyHostToDevice));
 
 
@@ -132,9 +146,9 @@ int main(int argc, char **argv) {
   free(A);
   free(B);
   free(B_ref);
-  cudaCheck(cudaFree(dA));
-  cudaCheck(cudaFree(dB));
-  cudaCheck(cudaFree(dB_ref));
+  cudaCheck2(cudaFree(dA));
+  cudaCheck2(cudaFree(dB));
+  cudaCheck2(cudaFree(dB_ref));
 
   return 0;
 }
