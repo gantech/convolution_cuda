@@ -80,7 +80,7 @@ __global__ void conv2d_shared_mem_block(const __grid_constant__ CUtensorMap tens
     // Initiate bulk tensor copy.
     cde::cp_async_bulk_tensor_2d_global_to_shared(&As, &tensor_map_a, cRow, cCol, bar);
     // Arrive on the barrier and tell how many bytes are expected to come in.
-    token = cuda::device::barrier_arrive_tx(bar, 1, sizeof(As));
+    token = cuda::device::barrier_arrive_tx(bar, 1,  (BLOCKSIZE+2) * (BLOCKSIZE+2) * sizeof(double));
   } else {
     // Other threads just arrive.
     token = bar.arrive();
