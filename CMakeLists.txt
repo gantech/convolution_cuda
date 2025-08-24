@@ -29,3 +29,8 @@ set_target_properties(conv2d PROPERTIES CUDA_ARCHITECTURES ${CUDA_COMPUTE_CAPABI
 target_link_directories(conv2d PRIVATE ${CUDA_CUDNN_DIR}/lib)
 target_link_libraries(conv2d ${CUDA_LIBRARIES} cudnn)
 
+add_executable(conv2d_padded conv2d_padded.cu)
+set_target_properties(conv2d_padded PROPERTIES CUDA_ARCHITECTURES ${CUDA_COMPUTE_CAPABILITY})
+target_link_libraries(conv2d_padded ${CUDA_LIBRARIES})
+
+
