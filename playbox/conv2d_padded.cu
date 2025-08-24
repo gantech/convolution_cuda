@@ -27,8 +27,9 @@ void cudaCheck(cudaError_t error, const char *file, int line) {
 };
 
 template <const int BLOCKSIZE>
-__global__ void conv2d_shared_mem_block(int M, int N, 
-                                       const double *A, double *B) {
+__global__ void conv2d_shared_mem_block(const __grid_constant__ CUtensorMap tensor_map_a, 
+                                        int M, int N, 
+                                        const double *A, double *B) {
   // the output block that we want to compute in this threadblock
   const uint cRow = blockIdx.y;
   const uint cCol = blockIdx.x;
@@ -43,53 +44,38 @@ __global__ void conv2d_shared_mem_block(int M, int N,
 
   // allocate buffer for current block including padding in fast shared mem
   // shared mem is shared between all threads in a block
-  __shared__ double As[(BLOCKSIZE + 2) * (BLOCKSIZE + 2)];
+  __shared__ alignas(128) double As[CEIL_DIV((BLOCKSIZE + 2) * (BLOCKSIZE + 2) , 128) * 128];
 
   // the inner row & col that we're accessing in this thread
   const uint threadCol = threadIdx.x % BLOCKSIZE;
   const uint threadRow = threadIdx.x / BLOCKSIZE;
 
-  // Set up async pipeline with default 2-stage depth
-  auto pipe = cuda::make_pipeline();
+  // Initialize shared memory barrier with the number of threads participating in the barrier.
+  #pragma nv_diag_suppress static_var_with_dynamic_init
+  __shared__ barrier bar;
 
-  // Each threadblock cooperatively loads the entire block in a single TMA operation
-  // This is much more efficient than issuing many small transfers
-  
-  // Since we need to coordinate across the block, we'll use thread 0 to issue the copy
   if (threadIdx.x == 0) {
-    // Acquire a slot in the pipeline
-    pipe.producer_acquire();
-    
-    // Calculate source and destination addresses
-    const double* src_ptr = &A[cRow * BLOCKSIZE * (N+2) + cCol * BLOCKSIZE];
-    double* dst_ptr = &As[0];
-    
-    // Define the copy parameters directly (without using a struct)
-    // Size in elements (not bytes)
-    const size_t rows = BLOCKSIZE + 2;
-    const size_t cols = BLOCKSIZE + 2;
-    
-    // Stride in elements (not bytes)
-    const size_t src_stride = N + 2;
-    const size_t dst_stride = BLOCKSIZE + 2;
-    
-    // Issue a single 2D copy for the entire tile
-    // Each row has (BLOCKSIZE+2) elements, and we copy (BLOCKSIZE+2) rows
-    cuda::memcpy_async(dst_ptr, src_ptr, 
-                      cols * sizeof(double), rows,
-                      dst_stride * sizeof(double),
-                      src_stride * sizeof(double),
-                      pipe);
-    
-    // Commit the copy operation to the pipeline
-    pipe.producer_commit();
+    // Initialize barrier. All `blockDim.x` threads in block participate.
+    init(&bar, blockDim.x);
+    // Make initialized barrier visible in async proxy.
+    cde::fence_proxy_async_shared_cta();
   }
-  
-  // Wait for all memory operations to complete
-  // Note that even though only one thread issued the copy, all threads need to wait
-  pipe.consumer_wait();
-  block.sync();  // Ensure all threads see the loaded data
-  
+  // Syncthreads so initialized barrier is visible to all threads.
+  __syncthreads();
+
+  barrier::arrival_token token;
+  if (threadIdx.x == 0) {
+    // Initiate bulk tensor copy.
+    cde::cp_async_bulk_tensor_2d_global_to_shared(&As, &tensor_map_a, cRow, cCol, bar);
+    // Arrive on the barrier and tell how many bytes are expected to come in.
+    token = cuda::device::barrier_arrive_tx(bar, 1, sizeof(As));
+  } else {
+    // Other threads just arrive.
+    token = bar.arrive();
+  }
+  // Wait for the data to have arrived.
+  bar.wait(std::move(token));
+
   double tmp = 0.0;
   for (int fi = -1 ; fi < 2; fi++) {
     for (int fj = -1; fj < 2; fj++) { 
@@ -141,6 +127,45 @@ int main(int argc, char **argv) {
                        cudaMemcpyHostToDevice));
 
 
+  CUtensorMap tensor_map_a{};
+  // rank is the number of dimensions of the array.
+  constexpr uint32_t rank = 2;
+  uint64_t size[rank] = {M+2, N+2};
+  // The stride is the number of bytes to traverse from the first element of one row to the next.
+  // It must be a multiple of 16.
+  uint64_t stride[rank - 1] = {(N+2) * sizeof(double)};
+  // The box_size is the size of the shared memory buffer that is used as the
+  // destination of a TMA transfer.
+  uint32_t box_size[rank] = {34, 34};
+  // The distance between elements in units of sizeof(element). A stride of 2
+  // can be used to load only the real component of a complex-valued tensor, for instance.
+  uint32_t elem_stride[rank] = {1, 1};
+
+  // Get a function pointer to the cuTensorMapEncodeTiled driver API.
+  auto cuTensorMapEncodeTiled = get_cuTensorMapEncodeTiled();
+
+  // Create the tensor descriptor.
+  CUresult res_a = cuTensorMapEncodeTiled(
+    &tensor_map_a,                // CUtensorMap *tensorMap,
+    CUtensorMapDataType::CU_TENSOR_MAP_DATA_TYPE_FLOAT64,
+    rank,                       // cuuint32_t tensorRank,
+    dA,                 // void *globalAddress,
+    size,                       // const cuuint64_t *globalDim,
+    stride,                     // const cuuint64_t *globalStrides,
+    box_size,                   // const cuuint32_t *boxDim,
+    elem_stride,                // const cuuint32_t *elementStrides,
+    // Interleave patterns can be used to accelerate loading of values that
+    // are less than 4 bytes long.
+    CUtensorMapInterleave::CU_TENSOR_MAP_INTERLEAVE_NONE,
+    // Swizzling can be used to avoid shared memory bank conflicts.
+    CUtensorMapSwizzle::CU_TENSOR_MAP_SWIZZLE_NONE,
+    // L2 Promotion can be used to widen the effect of a cache-policy to a wider
+    // set of L2 cache lines.
+    CUtensorMapL2promotion::CU_TENSOR_MAP_L2_PROMOTION_NONE,
+    // Don't set out-of-bounds elements to anything during TMA transfers
+    CUtensorMapFloatOOBfill::CU_TENSOR_MAP_FLOAT_OOB_FILL_NONE
+  );
+
   // Using cudaEvent for gpu stream timing, cudaEvent is equivalent to
   // publishing event tasks in the target stream
   float elapsed_time;
@@ -157,8 +182,7 @@ int main(int argc, char **argv) {
   cudaEventRecord(beg);
   for (int j = 0; j < 50; j++) {                       
     conv2d_shared_mem_block<32>
-      <<<gridDim, blockDim>>>(M, N, dA, dB);
-    cudaGetLastError(); // Check for async errors during kernel run      
+      <<<gridDim, blockDim>>>(tensor_map_a, M, N, dA, dB);
   }
 
   cudaEventRecord(end);
