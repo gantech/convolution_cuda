@@ -5,7 +5,6 @@
 #include <cooperative_groups.h>
 #include <cstdio>
 #include <cstdlib>
-#include <cublas_v2.h>
 #include <cuda/barrier>
 #include <cuda_runtime.h>
 
