@@ -164,8 +164,12 @@ void runConv2d2DBlocktiling(int M, int N, double *A, double *B) {
     const uint BN = 128;
     dim3 gridDim(CEIL_DIV(N, BN), CEIL_DIV(M, BM));
     dim3 blockDim((BM * BN) / (TM * TN));
+    // Add before kernel launch:
+    cudaFuncSetAttribute(conv2d2DBlocktiling<128,128,8,8>, 
+                    cudaFuncAttributeMaxDynamicSharedMemorySize, 
+                    135200);  // Increase to almost 132KB if hardware allows
     conv2d2DBlocktiling<BM, BN, TM, TN>
-        <<<gridDim, blockDim>>>(M, N, A, B);
+        <<<gridDim, blockDim, 135200>>>(M, N, A, B);
   } else {
     // this is a hacky solution to the underlying problem
     // of not having proper bounds checking in the kernel
@@ -173,8 +177,12 @@ void runConv2d2DBlocktiling(int M, int N, double *A, double *B) {
     const uint BN = 64;
     dim3 gridDim(CEIL_DIV(N, BN), CEIL_DIV(M, BM));
     dim3 blockDim((BM * BN) / (TM * TN));
+    // Add before kernel launch:
+    cudaFuncSetAttribute(conv2d2DBlocktiling<64,64,8,8>, 
+                    cudaFuncAttributeMaxDynamicSharedMemorySize, 
+                    34848);  
     conv2d2DBlocktiling<BM, BN, TM, TN>
-        <<<gridDim, blockDim>>>(M, N, A, B);
+        <<<gridDim, blockDim, 34848>>>(M, N, A, B);
   }
 }
 
