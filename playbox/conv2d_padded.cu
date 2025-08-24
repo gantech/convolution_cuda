@@ -11,8 +11,11 @@
 #include <sys/time.h>
 #include <time.h>
 #include <unistd.h>
-#include <cuda/pipeline>
-#include <cooperative_groups.h>
+#include <cuda.h>
+#include <cudaTypedefs.h> // PFN_cuTensorMapEncodeTiled, CUtensorMap
+#include <cuda_runtime.h>
+#include <cassert>
+#include <cuda/barrier>
 
 #define cudaCheck2(err) (cudaCheck(err, __FILE__, __LINE__))
 
