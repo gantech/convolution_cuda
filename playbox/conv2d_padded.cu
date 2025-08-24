@@ -32,6 +32,16 @@ void cudaCheck(cudaError_t error, const char *file, int line) {
   }
 };
 
+PFN_cuTensorMapEncodeTiled_v12000 get_cuTensorMapEncodeTiled() {
+  // Get pointer to cuTensorMapEncodeTiled
+  cudaDriverEntryPointQueryResult driver_status;
+  void* cuTensorMapEncodeTiled_ptr = nullptr;
+  cudaCheck2(cudaGetDriverEntryPointByVersion("cuTensorMapEncodeTiled", &cuTensorMapEncodeTiled_ptr, 12000, cudaEnableDefault, &driver_status));
+  assert(driver_status == cudaDriverEntryPointSuccess);
+
+  return reinterpret_cast<PFN_cuTensorMapEncodeTiled_v12000>(cuTensorMapEncodeTiled_ptr);
+}
+
 template <const int BLOCKSIZE>
 __global__ void conv2d_shared_mem_block(const __grid_constant__ CUtensorMap tensor_map_a, 
                                         int M, int N, 
