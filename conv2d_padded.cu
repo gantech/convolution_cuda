@@ -11,6 +11,8 @@
 #include <sys/time.h>
 #include <time.h>
 #include <unistd.h>
+#include <cuda/pipeline>
+#include <cooperative_groups.h>
 
 #define cudaCheck2(err) (cudaCheck(err, __FILE__, __LINE__))
 
@@ -30,6 +32,10 @@ __global__ void conv2d_shared_mem_block(int M, int N,
   // the output block that we want to compute in this threadblock
   const uint cRow = blockIdx.y;
   const uint cCol = blockIdx.x;
+  
+  // Need to include cooperative groups for block synchronization
+  namespace cg = cooperative_groups;
+  auto block = cg::this_thread_block();
 
   double filter[9] = {-1.0, -1.0, -1.0,
           -1.0, 8.0, -1.0,
@@ -43,19 +49,48 @@ __global__ void conv2d_shared_mem_block(int M, int N,
   const uint threadCol = threadIdx.x % BLOCKSIZE;
   const uint threadRow = threadIdx.x / BLOCKSIZE;
 
-  // advance pointers to the starting positions
-  // B += (cRow * BLOCKSIZE) * N + cCol * BLOCKSIZE;
+  // Set up async pipeline with default 2-stage depth
+  auto pipe = cuda::make_pipeline();
 
-  // Each block loads (BLOCKSIZE+2) x (BLOCKSIZE+2) elements into shared memory
-  for (int i = threadIdx.x; i < (BLOCKSIZE+2)*(BLOCKSIZE+2); i += blockDim.x) {
-    int smem_row = i / (BLOCKSIZE+2);
-    int smem_col = i % (BLOCKSIZE+2);
-    int g_row = cRow * BLOCKSIZE + smem_row;
-    int g_col = cCol * BLOCKSIZE + smem_col;
-    As[smem_row * (BLOCKSIZE+2) + smem_col] = A[g_row * (N+2) + g_col];
+  // Each threadblock cooperatively loads the entire block in a single TMA operation
+  // This is much more efficient than issuing many small transfers
+  
+  // Since we need to coordinate across the block, we'll use thread 0 to issue the copy
+  if (threadIdx.x == 0) {
+    // Acquire a slot in the pipeline
+    pipe.producer_acquire();
+    
+    // Calculate source and destination addresses
+    const double* src_ptr = &A[cRow * BLOCKSIZE * (N+2) + cCol * BLOCKSIZE];
+    double* dst_ptr = &As[0];
+    
+    // Create a struct to define the 2D memory layout
+    struct MemcpyParams {
+      // Size in elements (not bytes)
+      size_t rows = BLOCKSIZE + 2;
+      size_t cols = BLOCKSIZE + 2;
+      
+      // Stride in elements (not bytes)
+      size_t src_stride = N + 2;
+      size_t dst_stride = BLOCKSIZE + 2;
+    } params;
+    
+    // Issue a single 2D copy for the entire tile
+    // Each row has (BLOCKSIZE+2) elements, and we copy (BLOCKSIZE+2) rows
+    cuda::memcpy_async(dst_ptr, src_ptr, 
+                      params.cols * sizeof(double), params.rows,
+                      params.dst_stride * sizeof(double),
+                      params.src_stride * sizeof(double),
+                      pipe);
+    
+    // Commit the copy operation to the pipeline
+    pipe.producer_commit();
   }
-
-  __syncthreads();
+  
+  // Wait for all memory operations to complete
+  // Note that even though only one thread issued the copy, all threads need to wait
+  pipe.consumer_wait();
+  block.sync();  // Ensure all threads see the loaded data
   
   double tmp = 0.0;
   for (int fi = -1 ; fi < 2; fi++) {
