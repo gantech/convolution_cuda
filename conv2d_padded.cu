@@ -44,15 +44,15 @@ __global__ void conv2d_shared_mem_block(int M, int N,
   const uint threadRow = threadIdx.x / BLOCKSIZE;
 
   // advance pointers to the starting positions
-  B += (cRow * BLOCKSIZE) * N + cCol * BLOCKSIZE;
+  // B += (cRow * BLOCKSIZE) * N + cCol * BLOCKSIZE;
 
   // Each block loads (BLOCKSIZE+2) x (BLOCKSIZE+2) elements into shared memory
   for (int i = threadIdx.x; i < (BLOCKSIZE+2)*(BLOCKSIZE+2); i += blockDim.x) {
     int smem_row = i / (BLOCKSIZE+2);
     int smem_col = i % (BLOCKSIZE+2);
-    int g_row = cRow * BLOCKSIZE + smem_row - 1;
-    int g_col = cCol * BLOCKSIZE + smem_col - 1;
-    As[smem_row * (BLOCKSIZE+2) + smem_col] = A[g_row * N + g_col];
+    int g_row = cRow * BLOCKSIZE + smem_row;
+    int g_col = cCol * BLOCKSIZE + smem_col;
+    As[smem_row * (BLOCKSIZE+2) + smem_col] = A[g_row * (N+2) + g_col];
   }
 
   __syncthreads();
@@ -60,11 +60,11 @@ __global__ void conv2d_shared_mem_block(int M, int N,
   double tmp = 0.0;
   for (int fi = -1 ; fi < 2; fi++) {
     for (int fj = -1; fj < 2; fj++) { 
-        tmp += As[(threadRow + fi + 1) * (BLOCKSIZE + 2) + (threadCol + fj + 1)] * filter[(fi + 1) * 3 + (fj + 1)];
+      tmp += As[(threadRow + fi + 1) * (BLOCKSIZE + 2) + (threadCol + fj + 1)] * filter[(fi + 1) * 3 + (fj + 1)];
     }
   }
 
-  B[threadRow * N + threadCol] = tmp;
+  B[(cRow * BLOCKSIZE + threadRow )* N + cCol * BLOCKSIZE + threadCol] = tmp;
 
 }
 
@@ -91,20 +91,20 @@ int main(int argc, char **argv) {
         *dB_ref = nullptr; // device matrices
 
   A = (double *)malloc(sizeof(double) * (M+2) * (N+2));
-  B = (double *)malloc(sizeof(double) * (M+2) * (N+2));
-  B_ref = (double *)malloc(sizeof(double) * (M+2) * (N+2));
+  B = (double *)malloc(sizeof(double) * M * N);
+  B_ref = (double *)malloc(sizeof(double) * M * N);
 
   randomize_matrix(A, (M+2) * (N+2));
 
   cudaCheck2(cudaMalloc((void **)&dA, sizeof(double) * (M+2) * (N+2)));
-  cudaCheck2(cudaMalloc((void **)&dB, sizeof(double) * (M+2) * (N+2)));
-  cudaCheck2(cudaMalloc((void **)&dB_ref, sizeof(double) * (M+2) * (N+2)));
+  cudaCheck2(cudaMalloc((void **)&dB, sizeof(double) * M * N));
+  cudaCheck2(cudaMalloc((void **)&dB_ref, sizeof(double) * M * N));
 
   cudaCheck2(cudaMemcpy(dA, A, sizeof(double) * (M+2) * (N+2),
                        cudaMemcpyHostToDevice));
-  cudaCheck2(cudaMemcpy(dB, B, sizeof(double) * (M+2) * (N+2),
+  cudaCheck2(cudaMemcpy(dB, B, sizeof(double) * M * N,
                        cudaMemcpyHostToDevice));
-  cudaCheck2(cudaMemcpy(dB_ref, B_ref, sizeof(double) * (M+2) * (N+2),
+  cudaCheck2(cudaMemcpy(dB_ref, B_ref, sizeof(double) * M * N,
                        cudaMemcpyHostToDevice));
 
 
@@ -124,7 +124,8 @@ int main(int argc, char **argv) {
   cudaEventRecord(beg);
   for (int j = 0; j < 50; j++) {                       
     conv2d_shared_mem_block<32>
-      <<<gridDim, blockDim>>>(M, N, A, B);
+      <<<gridDim, blockDim>>>(M, N, dA, dB);
+    cudaGetLastError(); // Check for async errors during kernel run      
   }
 
   cudaEventRecord(end);
