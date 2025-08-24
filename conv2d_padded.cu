@@ -64,23 +64,21 @@ __global__ void conv2d_shared_mem_block(int M, int N,
     const double* src_ptr = &A[cRow * BLOCKSIZE * (N+2) + cCol * BLOCKSIZE];
     double* dst_ptr = &As[0];
     
-    // Create a struct to define the 2D memory layout
-    struct MemcpyParams {
-      // Size in elements (not bytes)
-      size_t rows = BLOCKSIZE + 2;
-      size_t cols = BLOCKSIZE + 2;
-      
-      // Stride in elements (not bytes)
-      size_t src_stride = N + 2;
-      size_t dst_stride = BLOCKSIZE + 2;
-    } params;
+    // Define the copy parameters directly (without using a struct)
+    // Size in elements (not bytes)
+    const size_t rows = BLOCKSIZE + 2;
+    const size_t cols = BLOCKSIZE + 2;
+    
+    // Stride in elements (not bytes)
+    const size_t src_stride = N + 2;
+    const size_t dst_stride = BLOCKSIZE + 2;
     
     // Issue a single 2D copy for the entire tile
     // Each row has (BLOCKSIZE+2) elements, and we copy (BLOCKSIZE+2) rows
     cuda::memcpy_async(dst_ptr, src_ptr, 
-                      params.cols * sizeof(double), params.rows,
-                      params.dst_stride * sizeof(double),
-                      params.src_stride * sizeof(double),
+                      cols * sizeof(double), rows,
+                      dst_stride * sizeof(double),
+                      src_stride * sizeof(double),
                       pipe);
     
     // Commit the copy operation to the pipeline
