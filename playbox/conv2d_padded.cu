@@ -16,6 +16,7 @@
 #include <cuda_runtime.h>
 #include <cassert>
 #include <cuda/barrier>
+#include "kernels/0_cudnn.cuh"
 
 using barrier = cuda::barrier<cuda::thread_scope_block>;
 namespace cde = cuda::device::experimental;
@@ -97,18 +98,41 @@ __global__ void conv2d_shared_mem_block(const __grid_constant__ CUtensorMap tens
 
   B[(cRow * BLOCKSIZE + threadRow )* N + cCol * BLOCKSIZE + threadCol] = tmp;
 
+  // Destroy barrier. This invalidates the memory region of the barrier. If
+  // further computations were to take place in the kernel, this allows the
+  // memory location of the shared memory barrier to be reused.
+  if (threadIdx.x == 0) {
+    (&bar)->~barrier();
+  }  
 }
 
-void randomize_matrix(double *mat, int N) {
+bool verify_matrix(double *matRef, double *matOut, int N) {
+  double diff = 0.0;
+  int i;
+  for (i = 0; i < N; i++) {
+    diff = std::fabs(matRef[i] - matOut[i]);
+    if (diff > 0.01) {
+      printf("Divergence! Should %5.2f, Is %5.2f (Diff %5.2f) at %d\n",
+             matRef[i], matOut[i], diff, i);
+      return false;
+    }
+  }
+  return true;
+}
+
+void randomize_matrix(double *mat_nonpad, double * mat_pad, int M, int N) {
   // NOTICE: Use gettimeofday instead of srand((unsigned)time(NULL)); the time
   // precision is too low and the same random number is generated.
   struct timeval time {};
   gettimeofday(&time, nullptr);
   srand(time.tv_usec);
-  for (int i = 0; i < N; i++) {
-    double tmp = (double)(rand() % 5) + 0.01 * (rand() % 5);
-    tmp = (rand() % 2 == 0) ? tmp : tmp * (-1.);
-    mat[i] = tmp;
+  for (int i = 0; i < M; i++) {
+    for (int j = 0; j < N; j++) {
+        double tmp = (double)(rand() % 5) + 0.01 * (rand() % 5);
+        tmp = (rand() % 2 == 0) ? tmp : tmp * (-1.);
+        mat_nonpad[i * N + j] = tmp;
+        mat_pad[(i+1) * (N+2) + (j+1)] = tmp;
+    }
   }
 }
 
@@ -116,28 +140,36 @@ int main(int argc, char **argv) {
 
   long M=4096, N=4096;
 
-  double *A = nullptr, *B = nullptr, 
+  double *A = nullptr, *Anonpad = nullptr, *B = nullptr, 
         *B_ref = nullptr; // host matrices
-  double *dA = nullptr, *dB = nullptr, 
+  double *dA = nullptr, *dAnonpad = nullptr, *dB = nullptr, 
         *dB_ref = nullptr; // device matrices
 
   A = (double *)malloc(sizeof(double) * (M+2) * (N+2));
+  Anonpad = (double *)malloc(sizeof(double) * M * N);
   B = (double *)malloc(sizeof(double) * M * N);
   B_ref = (double *)malloc(sizeof(double) * M * N);
 
-  randomize_matrix(A, (M+2) * (N+2));
+  randomize_matrix(Anonpad, A, M, N );
 
   cudaCheck2(cudaMalloc((void **)&dA, sizeof(double) * (M+2) * (N+2)));
+  cudaCheck2(cudaMalloc((void **)&dAnonpad, sizeof(double) * M * N));
   cudaCheck2(cudaMalloc((void **)&dB, sizeof(double) * M * N));
   cudaCheck2(cudaMalloc((void **)&dB_ref, sizeof(double) * M * N));
 
   cudaCheck2(cudaMemcpy(dA, A, sizeof(double) * (M+2) * (N+2),
+                       cudaMemcpyHostToDevice));
+  cudaCheck2(cudaMemcpy(dAnonpad, Anonpad, sizeof(double) * M * N,
                        cudaMemcpyHostToDevice));
   cudaCheck2(cudaMemcpy(dB, B, sizeof(double) * M * N,
                        cudaMemcpyHostToDevice));
   cudaCheck2(cudaMemcpy(dB_ref, B_ref, sizeof(double) * M * N,
                        cudaMemcpyHostToDevice));
 
+
+
+  // Test cuDNN first
+  runCuDNNFP64(M, N, dAnonpad, dB_ref);
 
   CUtensorMap tensor_map_a{};
   // rank is the number of dimensions of the array.
@@ -190,6 +222,13 @@ int main(int argc, char **argv) {
   cudaFuncSetAttribute(conv2d_shared_mem_block<32>,
       cudaFuncAttributePreferredSharedMemoryCarveout,
       cudaSharedmemCarveoutMaxShared);
+
+  conv2d_shared_mem_block<32>
+      <<<gridDim, blockDim>>>(tensor_map_a, M, N, dA, dB);
+  cudaDeviceSynchronize();
+  cudaCheck2(cudaGetLastError());
+
+  verify_matrix(dB_ref, dB, M * N);
 
   cudaEventRecord(beg);
   for (int j = 0; j < 50; j++) {                       
