@@ -29,4 +29,4 @@ set_target_properties(conv2d PROPERTIES CUDA_ARCHITECTURES ${CUDA_COMPUTE_CAPABI
 target_link_directories(conv2d PRIVATE ${CUDA_CUDNN_DIR}/lib)
 target_link_libraries(conv2d ${CUDA_LIBRARIES} cudnn)
 
-include_directories(playbox)
+add_subdirectory(playbox)

@@ -56,7 +56,7 @@ __global__ void conv2d_shared_mem_block(const __grid_constant__ CUtensorMap tens
 
   // allocate buffer for current block including padding in fast shared mem
   // shared mem is shared between all threads in a block
-  __shared__ alignas(128) double As[CEIL_DIV((BLOCKSIZE + 2) * (BLOCKSIZE + 2) , 128) * 128];
+  __shared__ alignas(128) double As[CEIL_DIV((BLOCKSIZE + 2) * (BLOCKSIZE + 2) , 16) * 16];
 
   // the inner row & col that we're accessing in this thread
   const uint threadCol = threadIdx.x % BLOCKSIZE;
@@ -195,6 +195,7 @@ int main(int argc, char **argv) {
   for (int j = 0; j < 50; j++) {                       
     conv2d_shared_mem_block<32>
       <<<gridDim, blockDim>>>(tensor_map_a, M, N, dA, dB);
+    cudaCheck2(cudaGetLastError());
   }
 
   cudaEventRecord(end);
@@ -206,7 +207,7 @@ int main(int argc, char **argv) {
 
   long flops = 9 * M * N;
   printf(
-      "Average elapsed time: (%7.6f) s, performance: (%7.1f) GFLOPS. size: "
+      "Average elapsed time: (%7.6f) s, performance: (%7.6f) GFLOPS. size: "
       "(%ld).\n",
       elapsedTime / 50,
       (50 * flops * 1e-9) / elapsedTime, M);
@@ -216,9 +217,9 @@ int main(int argc, char **argv) {
   free(A);
   free(B);
   free(B_ref);
-  cudaCheck2(cudaFree(dA));
-  cudaCheck2(cudaFree(dB));
-  cudaCheck2(cudaFree(dB_ref));
+  // cudaCheck2(cudaFree(dA));
+  // cudaCheck2(cudaFree(dB));
+  // cudaCheck2(cudaFree(dB_ref));
 
   return 0;
 }
