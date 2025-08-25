@@ -43,7 +43,7 @@ PFN_cuTensorMapEncodeTiled_v12000 get_cuTensorMapEncodeTiled() {
   return reinterpret_cast<PFN_cuTensorMapEncodeTiled_v12000>(cuTensorMapEncodeTiled_ptr);
 }
 
-template <const int BLOCKSIZE>
+template <const int BM, const int BN>
 __global__ void conv2d_shared_mem_block(const __grid_constant__ CUtensorMap tensor_map_a, 
                                         int M, int N, 
                                         const double *A, double *B) {
@@ -57,11 +57,11 @@ __global__ void conv2d_shared_mem_block(const __grid_constant__ CUtensorMap tens
 
   // allocate buffer for current block including padding in fast shared mem
   // shared mem is shared between all threads in a block
-  __shared__ alignas(128) double As[CEIL_DIV((BLOCKSIZE + 2) * (BLOCKSIZE + 2) , 16) * 16];
+  __shared__ alignas(128) double As[CEIL_DIV((BM + 2) * (BN + 2) , 16) * 16];
 
   // the inner row & col that we're accessing in this thread
-  const uint threadCol = threadIdx.x % BLOCKSIZE;
-  const uint threadRow = threadIdx.x / BLOCKSIZE;
+  const uint threadCol = threadIdx.x % BN;
+  const uint threadRow = threadIdx.x / BN;
 
   // Initialize shared memory barrier with the number of threads participating in the barrier.
   #pragma nv_diag_suppress static_var_with_dynamic_init
@@ -79,9 +79,9 @@ __global__ void conv2d_shared_mem_block(const __grid_constant__ CUtensorMap tens
   barrier::arrival_token token;
   if (threadIdx.x == 0) {
     // Initiate bulk tensor copy.
-    cde::cp_async_bulk_tensor_2d_global_to_shared(&As, &tensor_map_a, cCol * BLOCKSIZE, cRow * BLOCKSIZE, bar);
+    cde::cp_async_bulk_tensor_2d_global_to_shared(&As, &tensor_map_a, cCol * BN, cRow * BM, bar);
     // Arrive on the barrier and tell how many bytes are expected to come in.
-    token = cuda::device::barrier_arrive_tx(bar, 1,  (BLOCKSIZE+2) * (BLOCKSIZE+2) * sizeof(double));
+    token = cuda::device::barrier_arrive_tx(bar, 1,  (BM+2) * (BN+2) * sizeof(double));
   } else {
     // Other threads just arrive.
     token = bar.arrive();
@@ -92,11 +92,11 @@ __global__ void conv2d_shared_mem_block(const __grid_constant__ CUtensorMap tens
   double tmp = 0.0;
   for (int fi = -1 ; fi < 2; fi++) {
     for (int fj = -1; fj < 2; fj++) { 
-      tmp += As[(threadRow + fi + 1) * (BLOCKSIZE + 2) + (threadCol + fj + 1)] * filter[(fi + 1) * 3 + (fj + 1)];
+      tmp += As[(threadRow + fi + 1) * (BN + 2) + (threadCol + fj + 1)] * filter[(fi + 1) * 3 + (fj + 1)];
     }
   }
 
-  B[(cRow * BLOCKSIZE + threadRow )* N + cCol * BLOCKSIZE + threadCol] = tmp;
+  B[(cRow * BM + threadRow )* N + cCol * BN + threadCol] = tmp;
 
   // Destroy barrier. This invalidates the memory region of the barrier. If
   // further computations were to take place in the kernel, this allows the
@@ -145,7 +145,9 @@ void randomize_matrix(double *mat_nonpad, double * mat_pad, int M, int N) {
 
 int main(int argc, char **argv) {
 
-  long M=4096, N=4096;
+  int M=4096, N=4096;
+  const int BM = 4096;
+  const int BN = 4;
 
   double *A = nullptr, *Anonpad = nullptr, *B = nullptr, 
         *B_ref = nullptr; // host matrices
@@ -188,7 +190,7 @@ int main(int argc, char **argv) {
   uint64_t stride[rank - 1] = {(N+2) * sizeof(double)};
   // The box_size is the size of the shared memory buffer that is used as the
   // destination of a TMA transfer.
-  uint32_t box_size[rank] = {34, 34};
+  uint32_t box_size[rank] = {BM+2, BN+2};
   // The distance between elements in units of sizeof(element). A stride of 2
   // can be used to load only the real component of a complex-valued tensor, for instance.
   uint32_t elem_stride[rank] = {1, 1};
@@ -242,7 +244,7 @@ int main(int argc, char **argv) {
 
   cudaEventRecord(beg);
   for (int j = 0; j < 50; j++) {                       
-    conv2d_shared_mem_block<32>
+    conv2d_shared_mem_block<BM, BN>
       <<<gridDim, blockDim>>>(tensor_map_a, M, N, dA, dB);
     cudaDeviceSynchronize();      
     cudaCheck2(cudaGetLastError());
