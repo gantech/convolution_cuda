@@ -79,7 +79,7 @@ __global__ void conv2d_shared_mem_block(const __grid_constant__ CUtensorMap tens
   barrier::arrival_token token;
   if (threadIdx.x == 0) {
     // Initiate bulk tensor copy.
-    cde::cp_async_bulk_tensor_2d_global_to_shared(&As, &tensor_map_a, cRow, cCol, bar);
+    cde::cp_async_bulk_tensor_2d_global_to_shared(&As, &tensor_map_a, cCol * BLOCKSIZE, cRow * BLOCKSIZE, bar);
     // Arrive on the barrier and tell how many bytes are expected to come in.
     token = cuda::device::barrier_arrive_tx(bar, 1,  (BLOCKSIZE+2) * (BLOCKSIZE+2) * sizeof(double));
   } else {
@@ -126,6 +126,13 @@ void randomize_matrix(double *mat_nonpad, double * mat_pad, int M, int N) {
   struct timeval time {};
   gettimeofday(&time, nullptr);
   srand(time.tv_usec);
+
+  for (int i = 0; i < M+2; i++) {
+    for (int j = 0; j < N+2; j++) {
+      mat_pad[ i * (N+2) + j] = 0.0;
+    }
+  }        
+
   for (int i = 0; i < M; i++) {
     for (int j = 0; j < N; j++) {
         double tmp = (double)(rand() % 5) + 0.01 * (rand() % 5);
@@ -168,8 +175,9 @@ int main(int argc, char **argv) {
 
 
 
-  // Test cuDNN first
+  // Get cuDNN result first as reference
   runCuDNNFP64(M, N, dAnonpad, dB_ref);
+  cudaMemcpy(B_ref, dB_ref, sizeof(double) * M * N, cudaMemcpyDeviceToHost);
 
   CUtensorMap tensor_map_a{};
   // rank is the number of dimensions of the array.
@@ -228,12 +236,15 @@ int main(int argc, char **argv) {
   cudaDeviceSynchronize();
   cudaCheck2(cudaGetLastError());
 
-  verify_matrix(dB_ref, dB, M * N);
+  cudaCheck2(cudaMemcpy(B, dB, sizeof(double) * M * N, cudaMemcpyDeviceToHost));
+
+  verify_matrix(B_ref, B, M * N);
 
   cudaEventRecord(beg);
   for (int j = 0; j < 50; j++) {                       
     conv2d_shared_mem_block<32>
       <<<gridDim, blockDim>>>(tensor_map_a, M, N, dA, dB);
+    cudaDeviceSynchronize();      
     cudaCheck2(cudaGetLastError());
   }
 
@@ -254,11 +265,13 @@ int main(int argc, char **argv) {
 
   // Clean up
   free(A);
+  free(Anonpad);
   free(B);
   free(B_ref);
-  // cudaCheck2(cudaFree(dA));
-  // cudaCheck2(cudaFree(dB));
-  // cudaCheck2(cudaFree(dB_ref));
+  cudaCheck2(cudaFree(dA));
+  cudaCheck2(cudaFree(dAnonpad));
+  cudaCheck2(cudaFree(dB));
+  cudaCheck2(cudaFree(dB_ref));
 
   return 0;
 }

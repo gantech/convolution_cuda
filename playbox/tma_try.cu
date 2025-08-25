@@ -26,8 +26,8 @@ __global__ void kernel(const __grid_constant__ CUtensorMap tensor_map, double * 
   __shared__ alignas(128) double smem_buffer[32][32];
 
   // the output block that we want to compute in this threadblock
-  const uint cRow = blockIdx.y;
-  const uint cCol = blockIdx.x;
+  const uint cRow = blockIdx.y * 32;
+  const uint cCol = blockIdx.x * 32;
 
   // Initialize shared memory barrier with the number of threads participating in the barrier.
   #pragma nv_diag_suppress static_var_with_dynamic_init
@@ -146,7 +146,8 @@ int main() {
   dim3 blockDim(32 * 32);
 
   kernel<<<gridDim, blockDim>>>(tensor_map, dA);  
-  
+  cudaDeviceSynchronize();
+  cudaCheck2(cudaGetLastError());
 
   return 0;
 }
