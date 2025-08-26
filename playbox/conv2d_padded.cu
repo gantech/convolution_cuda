@@ -43,6 +43,12 @@ PFN_cuTensorMapEncodeTiled_v12000 get_cuTensorMapEncodeTiled() {
   return reinterpret_cast<PFN_cuTensorMapEncodeTiled_v12000>(cuTensorMapEncodeTiled_ptr);
 }
 
+// Create an aligned shared memory using a union
+union SharedMemory {
+  char raw[1];
+  __align__(128) double aligned;
+};
+
 template <const int BM, const int BN>
 __global__ void conv2d_shared_mem_block(const __grid_constant__ CUtensorMap tensor_map_a, 
                                         int M, int N, 
@@ -55,26 +61,15 @@ __global__ void conv2d_shared_mem_block(const __grid_constant__ CUtensorMap tens
           -1.0, 8.0, -1.0,
           -1.0, -1.0, -1.0};
 
-  // Declare the single dynamic shared memory region as a char array.
-  extern __shared__ char smem[];
+  extern __shared__ SharedMemory shared_mem[];
 
-  // Define the desired alignment in bytes (128).
-  const size_t alignment = 128;
+  // Now you can use the properly aligned array
+  double* As = reinterpret_cast<double*>(shared_mem);
 
-  // Cast the shared memory pointer to a uintptr_t to perform bitwise operations.
-  uintptr_t base_address = (uintptr_t)smem;
-
-  // Calculate the padding needed to align to the next 128-byte boundary.
-  // The mask (alignment - 1) is used to find the remainder.
-  uintptr_t padding = (alignment - (base_address & (alignment - 1))) & (alignment - 1);
-
-  // Cast the base address to the final double array, applying the padding.
-  double* As = (double*)(base_address + padding);
-
-  // the inner row & col that we're accessing in this thread
-  const uint threadCol = threadIdx.x % BN;
-  const uint threadRow = threadIdx.x / BN;
-
+  if (threadIdx.x ==  0) {
+    printf("blockIdx.x = %d, blockIdx.y = %d \n", blockIdx.x, blockIdx.y);
+  } 
+    
   // Initialize shared memory barrier with the number of threads participating in the barrier.
   #pragma nv_diag_suppress static_var_with_dynamic_init
   __shared__ barrier bar;
@@ -100,6 +95,18 @@ __global__ void conv2d_shared_mem_block(const __grid_constant__ CUtensorMap tens
   }
   // Wait for the data to have arrived.
   bar.wait(std::move(token));
+
+  if (threadIdx.x == 0) {
+    for (int i = 0; i < BM; i++) {
+      for (int j = 0; j < BN; j++) {
+        printf("blockIdx.x = %d, blockIdx.y = %d, i = %d, j = %d, val = %e, ref = %d \n ", blockIdx.x, blockIdx.y, i, j, As[ (i+1)*(BN+2) + j+1], cCol * cRow);
+      }     
+    }   
+  } 
+
+  // // the inner row & col that we're accessing in this thread
+  // const uint threadCol = threadIdx.x % BN;
+  // const uint threadRow = threadIdx.x / BN;
 
   // double tmp = 0.0;
   // for (int fi = -1 ; fi < 2; fi++) {
@@ -146,20 +153,22 @@ void randomize_matrix(double *mat_nonpad, double * mat_pad, int M, int N) {
   }        
 
   for (int i = 0; i < M; i++) {
+    int cRow = i / 16;
     for (int j = 0; j < N; j++) {
-        double tmp = (double)(rand() % 5) + 0.01 * (rand() % 5);
-        tmp = (rand() % 2 == 0) ? tmp : tmp * (-1.);
-        mat_nonpad[i * N + j] = tmp;
-        mat_pad[(i+1) * (N+2) + (j+1)] = tmp;
+        int cCol = j / 16;
+        // double tmp = (double)(rand() % 5) + 0.01 * (rand() % 5);
+        // tmp = (rand() % 2 == 0) ? tmp : tmp * (-1.);
+        mat_nonpad[i * N + j] = cRow * cCol ;
+        mat_pad[(i+1) * (N+2) + (j+1)] = cRow * cCol;
     }
   }
 }
 
 int main(int argc, char **argv) {
 
-  int M=4096, N=4096;
-  const int BM = 4096;
-  const int BN = 4;
+  int M=128, N=128;
+  const int BM = 16;
+  const int BN = 16;
 
   double *A = nullptr, *Anonpad = nullptr, *B = nullptr, 
         *B_ref = nullptr; // host matrices
@@ -186,8 +195,6 @@ int main(int argc, char **argv) {
                        cudaMemcpyHostToDevice));
   cudaCheck2(cudaMemcpy(dB_ref, B_ref, sizeof(double) * M * N,
                        cudaMemcpyHostToDevice));
-
-
 
   // Get cuDNN result first as reference
   runCuDNNFP64(M, N, dAnonpad, dB_ref);
@@ -239,7 +246,7 @@ int main(int argc, char **argv) {
   cudaEventCreate(&beg);
   cudaEventCreate(&end);
               
-  dim3 gridDim(CEIL_DIV(M, 32), CEIL_DIV(N, 32));
+  dim3 gridDim(N/BN, M/BM);
   dim3 blockDim(32 * 32);
 
   // Add extra storage to ensure 128-byte alignment
@@ -252,7 +259,6 @@ int main(int argc, char **argv) {
       cudaFuncAttributeMaxDynamicSharedMemorySize, 
       204800); // 200 KB
 
-
   conv2d_shared_mem_block<BM, BN>
       <<<gridDim, blockDim, smem_bytes>>>(tensor_map_a, M, N, dA, dB);
   cudaDeviceSynchronize();
@@ -262,28 +268,28 @@ int main(int argc, char **argv) {
 
   verify_matrix(B_ref, B, M * N);
 
-  cudaEventRecord(beg);
-  for (int j = 0; j < 50; j++) {                       
-    conv2d_shared_mem_block<BM, BN>
-      <<<gridDim, blockDim, smem_bytes>>>(tensor_map_a, M, N, dA, dB);
-    cudaDeviceSynchronize();      
-    cudaCheck2(cudaGetLastError());
-  }
+  // cudaEventRecord(beg);
+  // for (int j = 0; j < 50; j++) {                       
+  //   conv2d_shared_mem_block<BM, BN>
+  //     <<<gridDim, blockDim, smem_bytes>>>(tensor_map_a, M, N, dA, dB);
+  //   cudaDeviceSynchronize();      
+  //   cudaCheck2(cudaGetLastError());
+  // }
 
-  cudaEventRecord(end);
-  cudaEventSynchronize(end);
-  float elapsedTime;
-  cudaEventElapsedTime(&elapsedTime, beg, end);
-  elapsedTime /= 1000.0; // Convert to seconds
-  printf("Elapsed time: %.2f s\n", elapsedTime);
+  // cudaEventRecord(end);
+  // cudaEventSynchronize(end);
+  // float elapsedTime;
+  // cudaEventElapsedTime(&elapsedTime, beg, end);
+  // elapsedTime /= 1000.0; // Convert to seconds
+  // printf("Elapsed time: %.2f s\n", elapsedTime);
 
-  long flops = 9 * M * N;
-  printf(
-      "Average elapsed time: (%7.6f) s, performance: (%7.6f) GFLOPS. size: "
-      "(%ld).\n",
-      elapsedTime / 50,
-      (50 * flops * 1e-9) / elapsedTime, M);
-  fflush(stdout);
+  // long flops = 9 * M * N;
+  // printf(
+  //     "Average elapsed time: (%7.6f) s, performance: (%7.6f) GFLOPS. size: "
+  //     "(%ld).\n",
+  //     elapsedTime / 50,
+  //     (50 * flops * 1e-9) / elapsedTime, M);
+  // fflush(stdout);
 
   // Clean up
   free(A);
