@@ -91,7 +91,7 @@ __global__ void conv2d_shared_mem_block(const __grid_constant__ CUtensorMap tens
   barrier::arrival_token token;
   if (threadIdx.x == 0) {
     // Initiate bulk tensor copy.
-    cde::cp_async_bulk_tensor_2d_global_to_shared(&As, &tensor_map_a, cCol * BN, cRow * BM, bar);
+    cde::cp_async_bulk_tensor_2d_global_to_shared(As, &tensor_map_a, cCol * BN, cRow * BM, bar);
     // Arrive on the barrier and tell how many bytes are expected to come in.
     token = cuda::device::barrier_arrive_tx(bar, 1,  (BM+2) * (BN+2) * sizeof(double));
   } else {
@@ -101,14 +101,14 @@ __global__ void conv2d_shared_mem_block(const __grid_constant__ CUtensorMap tens
   // Wait for the data to have arrived.
   bar.wait(std::move(token));
 
-  double tmp = 0.0;
-  for (int fi = -1 ; fi < 2; fi++) {
-    for (int fj = -1; fj < 2; fj++) { 
-      tmp += As[(threadRow + fi + 1) * (BN + 2) + (threadCol + fj + 1)] * filter[(fi + 1) * 3 + (fj + 1)];
-    }
-  }
+  // double tmp = 0.0;
+  // for (int fi = -1 ; fi < 2; fi++) {
+  //   for (int fj = -1; fj < 2; fj++) { 
+  //     tmp += As[(threadRow + fi + 1) * (BN + 2) + (threadCol + fj + 1)] * filter[(fi + 1) * 3 + (fj + 1)];
+  //   }
+  // }
 
-  B[(cRow * BM + threadRow )* N + cCol * BN + threadCol] = tmp;
+  // B[(cRow * BM + threadRow )* N + cCol * BN + threadCol] = tmp;
 
   // Destroy barrier. This invalidates the memory region of the barrier. If
   // further computations were to take place in the kernel, this allows the
@@ -241,14 +241,19 @@ int main(int argc, char **argv) {
               
   dim3 gridDim(CEIL_DIV(M, 32), CEIL_DIV(N, 32));
   dim3 blockDim(32 * 32);
-  cudaFuncSetAttribute(conv2d_shared_mem_block<32>,
-      cudaFuncAttributePreferredSharedMemoryCarveout,
-      cudaSharedmemCarveoutMaxShared);
 
   // Add extra storage to ensure 128-byte alignment
   int smem_bytes = (CEIL_DIV((BM + 2) * (BN + 2) , 16) + 1) * 16 * 8;
 
-  conv2d_shared_mem_block<32>
+  std::cout << "smem_bytes = " << smem_bytes << std::endl; 
+
+  // Set max shared memory for the device (200 KB = 204,800 bytes)
+  cudaFuncSetAttribute(conv2d_shared_mem_block<BM, BN>, 
+      cudaFuncAttributeMaxDynamicSharedMemorySize, 
+      204800); // 200 KB
+
+
+  conv2d_shared_mem_block<BM, BN>
       <<<gridDim, blockDim, smem_bytes>>>(tensor_map_a, M, N, dA, dB);
   cudaDeviceSynchronize();
   cudaCheck2(cudaGetLastError());
@@ -260,7 +265,7 @@ int main(int argc, char **argv) {
   cudaEventRecord(beg);
   for (int j = 0; j < 50; j++) {                       
     conv2d_shared_mem_block<BM, BN>
-      <<<gridDim, blockDim>>>(tensor_map_a, M, N, dA, dB);
+      <<<gridDim, blockDim, smem_bytes>>>(tensor_map_a, M, N, dA, dB);
     cudaDeviceSynchronize();      
     cudaCheck2(cudaGetLastError());
   }
