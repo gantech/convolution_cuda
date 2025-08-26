@@ -55,9 +55,21 @@ __global__ void conv2d_shared_mem_block(const __grid_constant__ CUtensorMap tens
           -1.0, 8.0, -1.0,
           -1.0, -1.0, -1.0};
 
-  // allocate buffer for current block including padding in fast shared mem
-  // shared mem is shared between all threads in a block
-  __shared__ alignas(128) double As[CEIL_DIV((BM + 2) * (BN + 2) , 16) * 16];
+  // Declare the single dynamic shared memory region as a char array.
+  extern __shared__ char smem[];
+
+  // Define the desired alignment in bytes (128).
+  const size_t alignment = 128;
+
+  // Cast the shared memory pointer to a uintptr_t to perform bitwise operations.
+  uintptr_t base_address = (uintptr_t)smem;
+
+  // Calculate the padding needed to align to the next 128-byte boundary.
+  // The mask (alignment - 1) is used to find the remainder.
+  uintptr_t padding = (alignment - (base_address & (alignment - 1))) & (alignment - 1);
+
+  // Cast the base address to the final double array, applying the padding.
+  double* As = (double*)(base_address + padding);
 
   // the inner row & col that we're accessing in this thread
   const uint threadCol = threadIdx.x % BN;
@@ -233,8 +245,11 @@ int main(int argc, char **argv) {
       cudaFuncAttributePreferredSharedMemoryCarveout,
       cudaSharedmemCarveoutMaxShared);
 
+  // Add extra storage to ensure 128-byte alignment
+  int smem_bytes = (CEIL_DIV((BM + 2) * (BN + 2) , 16) + 1) * 16 * 8;
+
   conv2d_shared_mem_block<32>
-      <<<gridDim, blockDim>>>(tensor_map_a, M, N, dA, dB);
+      <<<gridDim, blockDim, smem_bytes>>>(tensor_map_a, M, N, dA, dB);
   cudaDeviceSynchronize();
   cudaCheck2(cudaGetLastError());
 
