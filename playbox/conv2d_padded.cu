@@ -66,10 +66,6 @@ __global__ void conv2d_shared_mem_block(const __grid_constant__ CUtensorMap tens
   // Now you can use the properly aligned array
   double* As = reinterpret_cast<double*>(shared_mem);
 
-  if (threadIdx.x ==  0) {
-    printf("blockIdx.x = %d, blockIdx.y = %d \n", blockIdx.x, blockIdx.y);
-  } 
-    
   // Initialize shared memory barrier with the number of threads participating in the barrier.
   #pragma nv_diag_suppress static_var_with_dynamic_init
   __shared__ barrier bar;
@@ -95,14 +91,6 @@ __global__ void conv2d_shared_mem_block(const __grid_constant__ CUtensorMap tens
   }
   // Wait for the data to have arrived.
   bar.wait(std::move(token));
-
-  if (threadIdx.x == 0) {
-    for (int i = 0; i < BM; i++) {
-      for (int j = 0; j < BN; j++) {
-        printf("blockIdx.x = %d, blockIdx.y = %d, i = %d, j = %d, val = %e, ref = %d \n ", blockIdx.x, blockIdx.y, i, j, As[ (i+1)*(BN+2) + j+1], cCol * cRow);
-      }     
-    }   
-  } 
 
   // // the inner row & col that we're accessing in this thread
   // const uint threadCol = threadIdx.x % BN;
@@ -166,9 +154,9 @@ void randomize_matrix(double *mat_nonpad, double * mat_pad, int M, int N) {
 
 int main(int argc, char **argv) {
 
-  int M=128, N=128;
-  const int BM = 16;
-  const int BN = 16;
+  int M=4096, N=4096;
+  const int BM = 128;
+  const int BN = 128;
 
   double *A = nullptr, *Anonpad = nullptr, *B = nullptr, 
         *B_ref = nullptr; // host matrices
@@ -268,28 +256,28 @@ int main(int argc, char **argv) {
 
   verify_matrix(B_ref, B, M * N);
 
-  // cudaEventRecord(beg);
-  // for (int j = 0; j < 50; j++) {                       
-  //   conv2d_shared_mem_block<BM, BN>
-  //     <<<gridDim, blockDim, smem_bytes>>>(tensor_map_a, M, N, dA, dB);
-  //   cudaDeviceSynchronize();      
-  //   cudaCheck2(cudaGetLastError());
-  // }
+  cudaEventRecord(beg);
+  for (int j = 0; j < 50; j++) {                       
+    conv2d_shared_mem_block<BM, BN>
+      <<<gridDim, blockDim, smem_bytes>>>(tensor_map_a, M, N, dA, dB);
+    cudaDeviceSynchronize();      
+    cudaCheck2(cudaGetLastError());
+  }
 
-  // cudaEventRecord(end);
-  // cudaEventSynchronize(end);
-  // float elapsedTime;
-  // cudaEventElapsedTime(&elapsedTime, beg, end);
-  // elapsedTime /= 1000.0; // Convert to seconds
-  // printf("Elapsed time: %.2f s\n", elapsedTime);
+  cudaEventRecord(end);
+  cudaEventSynchronize(end);
+  float elapsedTime;
+  cudaEventElapsedTime(&elapsedTime, beg, end);
+  elapsedTime /= 1000.0; // Convert to seconds
+  printf("Elapsed time: %.2f s\n", elapsedTime);
 
-  // long flops = 9 * M * N;
-  // printf(
-  //     "Average elapsed time: (%7.6f) s, performance: (%7.6f) GFLOPS. size: "
-  //     "(%ld).\n",
-  //     elapsedTime / 50,
-  //     (50 * flops * 1e-9) / elapsedTime, M);
-  // fflush(stdout);
+  long flops = 9 * M * N;
+  printf(
+      "Average elapsed time: (%7.6f) s, performance: (%7.6f) GFLOPS. size: "
+      "(%ld).\n",
+      elapsedTime / 50,
+      (50 * flops * 1e-9) / elapsedTime, M);
+  fflush(stdout);
 
   // Clean up
   free(A);
