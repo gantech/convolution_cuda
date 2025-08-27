@@ -1,8 +1,8 @@
-add_executable(conv2d_padded conv2d_padded.cu)
-set_target_properties(conv2d_padded PROPERTIES CUDA_ARCHITECTURES ${CUDA_COMPUTE_CAPABILITY})
-target_include_directories(conv2d_padded PRIVATE ${CUDA_CUDNN_DIR}/include ${CMAKE_CURRENT_SOURCE_DIR}/../src)
-target_link_directories(conv2d_padded PRIVATE ${CUDA_CUDNN_DIR}/lib)
-target_link_libraries(conv2d_padded ${CUDA_LIBRARIES} cudnn)
+add_executable(conv2d_pad_play conv2d_padded.cu)
+set_target_properties(conv2d_pad_play PROPERTIES CUDA_ARCHITECTURES ${CUDA_COMPUTE_CAPABILITY})
+target_include_directories(conv2d_pad_play PRIVATE ${CUDA_CUDNN_DIR}/include ${CMAKE_CURRENT_SOURCE_DIR}/../src)
+target_link_directories(conv2d_pad_play PRIVATE ${CUDA_CUDNN_DIR}/lib)
+target_link_libraries(conv2d_pad_play ${CUDA_LIBRARIES} cudnn)
 
 add_executable(tma tma_try.cu)
 set_target_properties(tma PROPERTIES CUDA_ARCHITECTURES ${CUDA_COMPUTE_CAPABILITY})

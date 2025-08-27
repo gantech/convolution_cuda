@@ -155,8 +155,8 @@ void randomize_matrix(double *mat_nonpad, double * mat_pad, int M, int N) {
 int main(int argc, char **argv) {
 
   int M=4096, N=4096;
-  const int BM = 128;
-  const int BN = 128;
+  const int BM = 32;
+  const int BN = 32;
 
   double *A = nullptr, *Anonpad = nullptr, *B = nullptr, 
         *B_ref = nullptr; // host matrices

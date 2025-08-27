@@ -1,9 +1,14 @@
-#include "kernels.cuh"
-#include "runner.cuh"
+#include "kernels_padded.cuh"
+#include "runner_padded.cuh"
 #include <cmath>
 #include <cstdio>
 #include <fstream>
 #include <iomanip>
+#include <iostream>
+
+#define cudaCheck2(err) (cudaCheck(err, __FILE__, __LINE__))
+
+#define CEIL_DIV(M, N) (((M) + (N)-1) / (N))
 
 float get_sec() {
   struct timeval time;
@@ -58,7 +63,7 @@ void randomize_matrix(double *mat, int M, int N) {
   gettimeofday(&time, nullptr);
   srand(time.tv_usec);
 
-  zero_init_matrix(mat, (M+2)*(N+2));
+  zero_init_matrix(mat, (M+2)*(N+2));  
 
   for (int i = 0; i < M; i++) {
     for (int j = 0; j < N; j++) {
@@ -67,6 +72,7 @@ void randomize_matrix(double *mat, int M, int N) {
         mat[(i+1) * (N+2) + (j+1)] = tmp;
     }
   }
+
 }
 
 void range_init_matrix(double *mat, int N) {
@@ -127,7 +133,7 @@ int div_ceil(int numerator, int denominator) {
 }
 
 void run_conv2d_naive(int M, int N, double *A, double *B) {
-  dim3 gridDim(CEIL_DIV(M, 32), CEIL_DIV(N, 32));
+  dim3 gridDim(M/32, N/32);
   dim3 blockDim(32, 32);
   conv2d_naive<<<gridDim, blockDim>>>(M, N, A, B);
 }

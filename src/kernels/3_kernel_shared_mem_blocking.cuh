@@ -21,6 +21,7 @@ __global__ void conv2d_shared_mem_block(int M, int N,
   // allocate buffer for current block including padding in fast shared mem
   // shared mem is shared between all threads in a block
   __shared__ double As[(BLOCKSIZE + 2) * (BLOCKSIZE + 2)];
+  __shared__ double Bs[BLOCKSIZE * BLOCKSIZE];  
 
   // the inner row & col that we're accessing in this thread
   const uint threadCol = threadIdx.x % BLOCKSIZE;
@@ -41,7 +42,7 @@ __global__ void conv2d_shared_mem_block(int M, int N,
         As[smem_row * (BLOCKSIZE+2) + smem_col] = 0.0;
   }
 
-  __syncthreads();
+  // __syncthreads();
   
   double tmp = 0.0;
   for (int fi = -1 ; fi < 2; fi++) {
@@ -49,7 +50,9 @@ __global__ void conv2d_shared_mem_block(int M, int N,
         tmp += As[(threadRow + fi + 1) * (BLOCKSIZE + 2) + (threadCol + fj + 1)] * filter[(fi + 1) * 3 + (fj + 1)];
     }
   }
+  Bs[threadRow * BLOCKSIZE + threadCol] = tmp;
+  
 
-  B[threadRow * N + threadCol] = tmp;
+  // B[threadRow * N + threadCol] = tmp;
 
 }
