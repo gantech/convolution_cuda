@@ -21,6 +21,7 @@ include_directories(${CUDA_INCLUDE_DIRS})
 include_directories(${PROJECT_SOURCE_DIR}/src)
 # Configure the source file path to be compiled
 aux_source_directory(${PROJECT_SOURCE_DIR}/src SRC)
+aux_source_directory(${PROJECT_SOURCE_DIR}/src_padded SRC_PADDED)
 
 # generate executable
 add_executable(conv2d conv2d.cu ${SRC})
@@ -28,5 +29,13 @@ target_include_directories(conv2d PRIVATE ${CUDA_CUDNN_DIR}/include)
 set_target_properties(conv2d PROPERTIES CUDA_ARCHITECTURES ${CUDA_COMPUTE_CAPABILITY})
 target_link_directories(conv2d PRIVATE ${CUDA_CUDNN_DIR}/lib)
 target_link_libraries(conv2d ${CUDA_LIBRARIES} cudnn)
+
+# generate executable
+add_executable(conv2d_padded conv2d_padded.cu ${SRC_PADDED})
+target_include_directories(conv2d PRIVATE ${CUDA_CUDNN_DIR}/include)
+    set_target_properties(conv2d PROPERTIES CUDA_ARCHITECTURES ${CUDA_COMPUTE_CAPABILITY})
+target_link_directories(conv2d PRIVATE ${CUDA_CUDNN_DIR}/lib)
+target_link_libraries(conv2d ${CUDA_LIBRARIES} cudnn)
+
 
 add_subdirectory(playbox)
