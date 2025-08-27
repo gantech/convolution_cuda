@@ -145,15 +145,15 @@ void run_conv2d_coalesce(int M, int N, double *A, double *B) {
       <<<gridDim, blockDim>>>(M, N, A, B);
 }
 
-// void run_conv2d_shared_mem_block(int M, int N, double *A, double *B) {
-//   dim3 gridDim(CEIL_DIV(M, 32), CEIL_DIV(N, 32));
-//   dim3 blockDim(32 * 32);
-//   cudaFuncSetAttribute(conv2d_shared_mem_block<32>,
-//                        cudaFuncAttributePreferredSharedMemoryCarveout,
-//                        cudaSharedmemCarveoutMaxShared);
-//   conv2d_shared_mem_block<32>
-//       <<<gridDim, blockDim>>>(M, N, A, B);
-// }
+void run_conv2d_shared_mem_block(int M, int N, double *A, double *B) {
+  dim3 gridDim(CEIL_DIV(M, 32), CEIL_DIV(N, 32));
+  dim3 blockDim(32 * 32);
+  cudaFuncSetAttribute(conv2d_shared_mem_block<32>,
+                       cudaFuncAttributePreferredSharedMemoryCarveout,
+                       cudaSharedmemCarveoutMaxShared);
+  conv2d_shared_mem_block<32>
+      <<<gridDim, blockDim>>>(M, N, A, B);
+}
 
 // void runConv2d1DBlocktiling(int M, int N, double *A, double *B) {
 //   const uint BM = 64;
@@ -488,9 +488,9 @@ void run_kernel(int kernel_num, int M, int N, double *A, double *B) {
   case 2:
     run_conv2d_coalesce(M, N, A, B);
     break;  
-  // case 3:
-  //   run_conv2d_shared_mem_block(M, N,  A, B);
-  //   break;
+  case 3:
+    run_conv2d_shared_mem_block(M, N,  A, B);
+    break;
   // case 4:
   //   runConv2d1DBlocktiling(M, N, A, B);
   //   break;

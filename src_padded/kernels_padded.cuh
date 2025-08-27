@@ -4,7 +4,7 @@
 // #include "kernels/0_cudnn.cuh"
 #include "kernels_padded/1_naive_padded.cuh"
 #include "kernels_padded/2_kernel_global_mem_coalesce_padded.cuh"
-// #include "kernels/3_kernel_shared_mem_blocking.cuh"
+#include "kernels_padded/3_kernel_shared_mem_blocking.cuh"
 // #include "kernels/4_kernel_1D_blocktiling.cuh"
 // #include "kernels/5_kernel_2D_blocktiling.cuh"
 // #include "kernels/6_kernel_vectorize.cuh"
