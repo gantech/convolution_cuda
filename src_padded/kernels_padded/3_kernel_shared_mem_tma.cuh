@@ -1,9 +1,12 @@
 #pragma once
 
+#include <cuda.h>
 #include <algorithm>
 #include <cstdio>
 #include <cstdlib>
 #include <cuda_runtime.h>
+#include <cudaTypedefs.h> // PFN_cuTensorMapEncodeTiled, CUtensorMap
+#include <cuda/barrier>
 
 #define CEIL_DIV(M, N) (((M) + (N)-1) / (N))
 
@@ -63,10 +66,10 @@ __global__ void conv2d_shared_mem_tma(const __grid_constant__ CUtensorMap tensor
     }
   }
 
-  // advance pointers to the starting positions
-  B += cRow * BLOCKSIZE * N + cCol * BLOCKSIZE;
+  // // advance pointers to the starting positions
+  // B += cRow * BLOCKSIZE * N + cCol * BLOCKSIZE;
 
-  B[threadRow * N + threadCol] = tmp;
+  // B[threadRow * N + threadCol] = tmp;
 
   if (threadIdx.x == 0) {
     (&bar)->~barrier();

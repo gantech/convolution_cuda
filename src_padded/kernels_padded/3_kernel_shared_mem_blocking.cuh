@@ -47,6 +47,6 @@ __global__ void conv2d_shared_mem_block(int M, int N,
     }
   }
 
-  B[threadRow * N + threadCol] = tmp;
+  // B[threadRow * N + threadCol] = tmp;
 
 }

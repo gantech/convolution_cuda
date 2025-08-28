@@ -199,7 +199,7 @@ void run_conv2d_shared_mem_tma(int M, int N, double *A, double *B) {
     &tensor_map_a,                // CUtensorMap *tensorMap,
     CUtensorMapDataType::CU_TENSOR_MAP_DATA_TYPE_FLOAT64,
     rank,                       // cuuint32_t tensorRank,
-    dA,                 // void *globalAddress,
+    A,                 // void *globalAddress,
     size,                       // const cuuint64_t *globalDim,
     stride,                     // const cuuint64_t *globalStrides,
     box_size,                   // const cuuint32_t *boxDim,
