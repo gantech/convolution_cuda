@@ -169,13 +169,7 @@ PFN_cuTensorMapEncodeTiled_v12000 get_cuTensorMapEncodeTiled() {
   return reinterpret_cast<PFN_cuTensorMapEncodeTiled_v12000>(cuTensorMapEncodeTiled_ptr);
 }
 
-void run_conv2d_shared_mem_tma(int M, int N, double *A, double *B) {
-
-  const int BM = 32;
-  const int BN = 32;
-
-  dim3 gridDim(CEIL_DIV(M, 32), CEIL_DIV(N, 32));
-  dim3 blockDim(32 * 32);
+CUtensorMap get_tensor_map(const double *A, int M, int N, int BM, int BN) {
 
   CUtensorMap tensor_map_a{};
   // rank is the number of dimensions of the array.
@@ -216,24 +210,43 @@ void run_conv2d_shared_mem_tma(int M, int N, double *A, double *B) {
     CUtensorMapFloatOOBfill::CU_TENSOR_MAP_FLOAT_OOB_FILL_NONE
   );
 
+  return tensor_map_a;
+
+}
+
+void run_conv2d_shared_mem_tma(int M, int N, double *A, double *B) {
+
+  const int BM = 32;
+  const int BN = 32;
+
+  dim3 gridDim(CEIL_DIV(M, 32), CEIL_DIV(N, 32));
+  dim3 blockDim(32 * 32);
+
   cudaFuncSetAttribute(conv2d_shared_mem_tma<32>,
                        cudaFuncAttributePreferredSharedMemoryCarveout,
                        cudaSharedmemCarveoutMaxShared);
   conv2d_shared_mem_tma<32>
-      <<<gridDim, blockDim>>>(tensor_map_a, M, N, A, B);
+      <<<gridDim, blockDim>>>(get_tensor_map(A, M, N, BM, BN), M, N, A, B);
 }
 
-// void runConv2d1DBlocktiling(int M, int N, double *A, double *B) {
-//   const uint BM = 64;
-//   const uint BN = 64;
-//   const uint TM = 8;
-//   dim3 gridDim(CEIL_DIV(N, BN), CEIL_DIV(M, BM));
-//   // There are BM * BN elements to be calculated by this block 
-//   // by BM * BN / TM threads such that each thread calculates TM elements.
-//   dim3 blockDim((BM * BN) / TM);
-//   conv2d1DBlocktiling<BM, BN, TM>
-//       <<<gridDim, blockDim>>>(M, N, A, B);
-// }
+void runConv2d1DBlocktiling(int M, int N, double *A, double *B) {
+  const uint BM = 64;
+  const uint BN = 64;
+  const uint TM = 8;
+  dim3 gridDim(CEIL_DIV(N, BN), CEIL_DIV(M, BM));
+
+  // Add extra storage to ensure 128-byte alignment
+  int smem_bytes = (CEIL_DIV((BM + 2) * (BN + 2) , 16) + 1) * 16 * 8;
+  // Set max shared memory for the device (200 KB = 204,800 bytes)
+  cudaFuncSetAttribute(conv2d_shared_mem_block<BM, BN>, 
+      cudaFuncAttributeMaxDynamicSharedMemorySize, 
+      smem_bytes); 
+  // There are BM * BN elements to be calculated by this block 
+  // by BM * BN / TM threads such that each thread calculates TM elements.
+  dim3 blockDim((BM * BN) / TM);
+  conv2d1DBlocktiling<BM, BN, TM>
+      <<<gridDim, blockDim, smem_bytes>>>(get_tensor_map(A, M, N, BM, BN), M, N, A, B);
+}
 
 // void runConv2d2DBlocktiling(int M, int N, double *A, double *B) {
 //   const uint TM = 8;
@@ -562,9 +575,9 @@ void run_kernel(int kernel_num, int M, int N, double *A, double *B) {
   case 13:
     run_conv2d_shared_mem_tma(M, N, A, B);
     break;
-  // case 4:
-  //   runConv2d1DBlocktiling(M, N, A, B);
-  //   break;
+  case 4:
+    runConv2d1DBlocktiling(M, N, A, B);
+    break;
   // case 5:
   //   runConv2d2DBlocktiling(M, N, A, B);
   //   break;
