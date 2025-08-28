@@ -6,6 +6,10 @@
 #include <iomanip>
 #include <iostream>
 
+#include <cuda/barrier>
+#include <cuda_runtime.h>
+#include <cudaTypedefs.h> // PFN_cuTensorMapEncodeTiled, CUtensorMap
+
 #define cudaCheck2(err) (cudaCheck(err, __FILE__, __LINE__))
 
 #define CEIL_DIV(M, N) (((M) + (N)-1) / (N))
@@ -153,6 +157,70 @@ void run_conv2d_shared_mem_block(int M, int N, double *A, double *B) {
                        cudaSharedmemCarveoutMaxShared);
   conv2d_shared_mem_block<32>
       <<<gridDim, blockDim>>>(M, N, A, B);
+}
+
+PFN_cuTensorMapEncodeTiled_v12000 get_cuTensorMapEncodeTiled() {
+  // Get pointer to cuTensorMapEncodeTiled
+  cudaDriverEntryPointQueryResult driver_status;
+  void* cuTensorMapEncodeTiled_ptr = nullptr;
+  cudaCheck2(cudaGetDriverEntryPointByVersion("cuTensorMapEncodeTiled", &cuTensorMapEncodeTiled_ptr, 12000, cudaEnableDefault, &driver_status));
+  assert(driver_status == cudaDriverEntryPointSuccess);
+
+  return reinterpret_cast<PFN_cuTensorMapEncodeTiled_v12000>(cuTensorMapEncodeTiled_ptr);
+}
+
+void run_conv2d_shared_mem_tma(int M, int N, double *A, double *B) {
+
+  const int BM = 32;
+  const int BN = 32;
+
+  dim3 gridDim(CEIL_DIV(M, 32), CEIL_DIV(N, 32));
+  dim3 blockDim(32 * 32);
+
+  CUtensorMap tensor_map_a{};
+  // rank is the number of dimensions of the array.
+  constexpr uint32_t rank = 2;
+  uint64_t size[rank] = {M+2, N+2};
+  // The stride is the number of bytes to traverse from the first element of one row to the next.
+  // It must be a multiple of 16.
+  uint64_t stride[rank - 1] = {(N+2) * sizeof(double)};
+  // The box_size is the size of the shared memory buffer that is used as the
+  // destination of a TMA transfer.
+  uint32_t box_size[rank] = {BM+2, BN+2};
+  // The distance between elements in units of sizeof(element). A stride of 2
+  // can be used to load only the real component of a complex-valued tensor, for instance.
+  uint32_t elem_stride[rank] = {1, 1};
+
+  // Get a function pointer to the cuTensorMapEncodeTiled driver API.
+  auto cuTensorMapEncodeTiled = get_cuTensorMapEncodeTiled();
+
+  // Create the tensor descriptor.
+  CUresult res_a = cuTensorMapEncodeTiled(
+    &tensor_map_a,                // CUtensorMap *tensorMap,
+    CUtensorMapDataType::CU_TENSOR_MAP_DATA_TYPE_FLOAT64,
+    rank,                       // cuuint32_t tensorRank,
+    dA,                 // void *globalAddress,
+    size,                       // const cuuint64_t *globalDim,
+    stride,                     // const cuuint64_t *globalStrides,
+    box_size,                   // const cuuint32_t *boxDim,
+    elem_stride,                // const cuuint32_t *elementStrides,
+    // Interleave patterns can be used to accelerate loading of values that
+    // are less than 4 bytes long.
+    CUtensorMapInterleave::CU_TENSOR_MAP_INTERLEAVE_NONE,
+    // Swizzling can be used to avoid shared memory bank conflicts.
+    CUtensorMapSwizzle::CU_TENSOR_MAP_SWIZZLE_NONE,
+    // L2 Promotion can be used to widen the effect of a cache-policy to a wider
+    // set of L2 cache lines.
+    CUtensorMapL2promotion::CU_TENSOR_MAP_L2_PROMOTION_NONE,
+    // Don't set out-of-bounds elements to anything during TMA transfers
+    CUtensorMapFloatOOBfill::CU_TENSOR_MAP_FLOAT_OOB_FILL_NONE
+  );
+
+  cudaFuncSetAttribute(conv2d_shared_mem_tma<32>,
+                       cudaFuncAttributePreferredSharedMemoryCarveout,
+                       cudaSharedmemCarveoutMaxShared);
+  conv2d_shared_mem_tma<32>
+      <<<gridDim, blockDim>>>(tensor_map_a, M, N, A, B);
 }
 
 // void runConv2d1DBlocktiling(int M, int N, double *A, double *B) {
@@ -490,6 +558,9 @@ void run_kernel(int kernel_num, int M, int N, double *A, double *B) {
     break;  
   case 3:
     run_conv2d_shared_mem_block(M, N,  A, B);
+    break;
+  case 13:
+    run_conv2d_shared_mem_tma(M, N, A, B);
     break;
   // case 4:
   //   runConv2d1DBlocktiling(M, N, A, B);
