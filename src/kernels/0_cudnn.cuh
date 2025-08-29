@@ -99,8 +99,32 @@ void runCuDNNFP64(int H, int W, double *d_input, double *d_output) {
     checkCuda(cudaMemcpy(d_filter, h_filter.data(), filterSize, cudaMemcpyHostToDevice));
 
     // 4. Choose a Convolution Algorithm (using a specific algorithm for cuDNN 9.12)
-    cudnnConvolutionFwdAlgo_t algorithm = CUDNN_CONVOLUTION_FWD_ALGO_IMPLICIT_GEMM; // A common choice, might need experimentation
-                                                                                 // For best performance, consider using the Graph API.
+    cudnnConvolutionFwdAlgo_t algorithm = CUDNN_CONVOLUTION_FWD_ALGO_IMPLICIT_PRECOMP_GEMM; // Tried experimenting below. This was amongst the best two with very little difference
+
+    // // 4. Find the best convolution algorithm
+    // const int requested_algo_count = 10;
+    // int returned_algo_count;
+    // std::vector<cudnnConvolutionFwdAlgoPerf_t> perf_results(requested_algo_count);
+    
+    // checkCUDNN(cudnnFindConvolutionForwardAlgorithm(
+    //     cudnn,
+    //     inputDescriptor,
+    //     filterDescriptor,
+    //     convolutionDescriptor,
+    //     outputDescriptor,
+    //     requested_algo_count,
+    //     &returned_algo_count,
+    //     perf_results.data()
+    // ));
+
+    // // 5. Print the results
+    // std::cout << "Found " << returned_algo_count << " convolution algorithms:" << std::endl;
+    // for (int i = 0; i < returned_algo_count; ++i) {
+    //     const auto& result = perf_results[i];
+    //     std::cout << "Algo " << i << ": " << result.algo << ", Time: " << result.time << "ms, Memory: " << result.memory << " bytes, Status: " << result.status << std::endl;
+    // }
+
+
 
     // 5. Allocate Workspace (if needed)
     size_t workspaceSize = 0;
