@@ -22,7 +22,7 @@ __global__ void conv2d1DBlocktiling(int M, int N, const double *A, double *B) {
 
   // each warp will calculate 32*TM elements, with 32 being the columnar dim.
   const int threadCol = threadIdx.x % BN;
-  const int threadRow = threadIdx.x / BN;
+  const int threadRow = threadIdx.x / (BN * TM);
 
   // allocate buffer for current block including padding in fast shared mem
   // shared mem is shared between all threads in a block
@@ -53,7 +53,7 @@ __global__ void conv2d1DBlocktiling(int M, int N, const double *A, double *B) {
   for (int fi = -1 ; fi < 2; fi++) {
     for (int fj = -1; fj < 2; fj++) { 
        for (int ti = 0; ti < TM; ti++) {
-          threadResults[ti] += As[(threadRow * TM + ti + fi + 1) * (BM + 2) + (threadCol + fj + 1)] * filter[(fi + 1) * 3 + (fj + 1)];
+          threadResults[ti] += As[(threadRow * TM + ti + fi + 1) * (BN + 2) + (threadCol + fj + 1)] * filter[(fi + 1) * 3 + (fj + 1)];
        }
     }
   }
