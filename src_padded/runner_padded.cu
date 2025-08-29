@@ -281,28 +281,27 @@ void runConv2d1DBlocktiling(int M, int N, double *A, double *B) {
 //   }
 // }
 
-// void runConv2dVectorize(int M, int N, double *A, double *B) {
-//   const uint BK = 8;
-//   const uint TM = 8;
-//   const uint TN = 8;
-//   if (M >= 128 and N >= 128) {
-//     const uint BM = 128;
-//     const uint BN = 128;
-//     dim3 gridDim(CEIL_DIV(N, BN), CEIL_DIV(M, BM));
-//     dim3 blockDim((BM * BN) / (TM * TN));
-//     conv2dVectorize<BM, BN, BK, TM, TN>
-//         <<<gridDim, blockDim>>>(M, N, A, B);
-//   } else {
-//     // this is a hacky solution to the underlying problem
-//     // of not having proper bounds checking in the kernel
-//     const uint BM = 64;
-//     const uint BN = 64;
-//     dim3 gridDim(CEIL_DIV(N, BN), CEIL_DIV(M, BM));
-//     dim3 blockDim((BM * BN) / (TM * TN));
-//     conv2dVectorize<BM, BN, BK, TM, TN>
-//         <<<gridDim, blockDim>>>(M, N, A, B);
-//   }
-// }
+void runConv2dVectorize(int M, int N, double *A, double *B) {
+
+  const uint BM = 256;
+  const uint BN = 64;
+  const uint TM = 16;
+  dim3 gridDim(CEIL_DIV(N, BN), CEIL_DIV(M, BM));
+
+  // Add extra storage to ensure 128-byte alignment
+  int smem_bytes = (CEIL_DIV((BM + 2) * (BN + 2) , 16) + 1) * 16 * 8;
+  // Set max shared memory for the device (200 KB = 204,800 bytes)
+  cudaFuncSetAttribute(conv2dVectorize<BM, BN, TM>, 
+      cudaFuncAttributeMaxDynamicSharedMemorySize, 
+      smem_bytes);
+  // There are BM * BN elements to be calculated by this block 
+  // by BM * BN / TM threads such that each thread calculates TM elements.
+  dim3 blockDim((BM * BN) / TM);
+
+  assert( blockDim.x < 1025);
+  conv2dVectorize<BM, BN, TM>
+      <<<gridDim, blockDim, smem_bytes>>>(M, N, A, B);
+}
 
 // void runConv2dResolveBankConflicts(int M, int N, double *A, double *B) {
 //   const uint BK = 8;
@@ -584,9 +583,9 @@ void run_kernel(int kernel_num, int M, int N, double *A, double *B) {
   // case 5:
   //   runConv2d2DBlocktiling(M, N, A, B);
   //   break;
-  // case 6:
-  //   runConv2dVectorize(M, N, A, B);
-  //   break;
+  case 6:
+    runConv2dVectorize(M, N, A, B);
+    break;
   // case 7:
   //   runConv2dResolveBankConflicts(M, N, A, B);
   //   break;
