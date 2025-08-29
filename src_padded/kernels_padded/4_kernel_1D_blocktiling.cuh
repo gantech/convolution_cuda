@@ -27,10 +27,12 @@ __global__ void conv2d1DBlocktiling(const __grid_constant__ CUtensorMap tensor_m
   const uint cRow = blockIdx.y;
   const uint cCol = blockIdx.x;
 
-  extern __shared__ SharedMemory shared_mem[];
+  // extern __shared__ SharedMemory shared_mem[];
 
-  // Now you can use the properly aligned array
-  double* As = reinterpret_cast<double*>(shared_mem);
+  // // Now you can use the properly aligned array
+  // double* As = reinterpret_cast<double*>(shared_mem);
+
+  extern __shared__ double As[];
 
   // Each block loads (BM+2) x (BN+2) elements into shared memory
   for (int i = threadIdx.x; i < (BM+2)*(BN+2); i += blockDim.x) {
@@ -69,7 +71,7 @@ __global__ void conv2d1DBlocktiling(const __grid_constant__ CUtensorMap tensor_m
 
   // each warp will calculate 32*TM elements, with 32 being the columnar dim.
   const int threadCol = threadIdx.x % BN;
-  const int threadRow = threadIdx.x / BN;
+  const int threadRow = threadIdx.x / (BN * TM);
     
   // allocate thread-local cache for results in registerfile
   double threadResults[TM] = {0.0};
