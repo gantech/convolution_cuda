@@ -30,6 +30,8 @@ target_include_directories(conv2d PRIVATE ${CUDA_CUDNN_DIR}/include)
 set_target_properties(conv2d PROPERTIES CUDA_ARCHITECTURES ${CUDA_COMPUTE_CAPABILITY})
 target_link_directories(conv2d PRIVATE ${CUDA_CUDNN_DIR}/lib)
 target_link_libraries(conv2d ${CUDA_LIBRARIES} cudnn)
+target_compile_options(conv2d PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:--keep>)
+target_compile_options(conv2d PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:-lineinfo>)
 
 # generate executable
 add_executable(conv2d_padded conv2d_padded.cu ${SRC_PADDED})
@@ -37,6 +39,7 @@ target_include_directories(conv2d_padded PRIVATE ${CUDA_CUDNN_DIR}/include)
 set_target_properties(conv2d_padded PROPERTIES CUDA_ARCHITECTURES ${CUDA_COMPUTE_CAPABILITY})
 target_link_directories(conv2d_padded PRIVATE ${CUDA_CUDNN_DIR}/lib)
 target_link_libraries(conv2d_padded ${CUDA_LIBRARIES} cudnn)
-
+target_compile_options(conv2d_padded PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:--keep>)
+target_compile_options(conv2d_padded PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:-lineinfo>)
 
 add_subdirectory(playbox)
