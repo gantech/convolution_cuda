@@ -231,8 +231,8 @@ void run_conv2d_shared_mem_tma(int M, int N, double *A, double *B) {
 }
 
 void runConv2d1DBlocktiling(int M, int N, double *A, double *B) {
-  const uint BM = 256;
-  const uint BN = 64;
+  const uint BM = 64;
+  const uint BN = 256;
   const uint TM = 16;
   dim3 gridDim(CEIL_DIV(N, BN), CEIL_DIV(M, BM));
 
