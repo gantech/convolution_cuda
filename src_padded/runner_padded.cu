@@ -231,14 +231,14 @@ void run_conv2d_shared_mem_tma(int M, int N, double *A, double *B) {
 }
 
 void runConv2d1DBlocktiling(int M, int N, double *A, double *B) {
-  const uint BM = 64;
-  const uint BN = 256;
+  const uint BM = 256;
+  const uint BN = 64;
   const uint TM = 16;
   dim3 gridDim(CEIL_DIV(N, BN), CEIL_DIV(M, BM));
 
   // Add extra storage to ensure 128-byte alignment
   int smem_bytes = (CEIL_DIV((BM + 2) * (BN + 2) , 16) + 1) * 16 * 8;
-  // Set max shared memory for the device (200 KB = 204,800 bytes)
+  // Set max shared memory for the device
   cudaFuncSetAttribute(conv2d1DBlocktiling<BM, BN, TM>, 
       cudaFuncAttributeMaxDynamicSharedMemorySize, 
       smem_bytes);
@@ -248,7 +248,7 @@ void runConv2d1DBlocktiling(int M, int N, double *A, double *B) {
 
   assert( blockDim.x < 1025);
   conv2d1DBlocktiling<BM, BN, TM>
-      <<<gridDim, blockDim, smem_bytes>>>(get_tensor_map(A, M, N, BM, BN), M, N, A, B);
+      <<<gridDim, blockDim, smem_bytes>>>(M, N, A, B);
 }
 
 // void runConv2d2DBlocktiling(int M, int N, double *A, double *B) {

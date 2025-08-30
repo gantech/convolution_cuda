@@ -20,7 +20,7 @@ __global__ void conv2dVectorize(int M, int N, const double *A, double *B) {
     for (int i = threadIdx.x; i < (BM+2)*(BN+2)/2; i += blockDim.x) {
       int smem_row = 2 * i / (BN+2);
       int smem_col = (2 * i) % (BN+2);
-      int g_row = cRow * BN + smem_row;
+      int g_row = cRow * BM + smem_row;
       int g_col = cCol * BN + smem_col;
       double2 tmp =
           reinterpret_cast<const double2 *>(&A[g_row * N + g_col])[0];
