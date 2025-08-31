@@ -13,5 +13,5 @@
 // #include "kernels/8_kernel_bank_extra_col.cuh"
 // #include "kernels/9_kernel_autotuned.cuh"
 // #include "kernels/10_kernel_warptiling.cuh"
-// #include "kernels/11_kernel_double_buffering.cuh"
+#include "kernels/11_kernel_double_buffering.cuh"
 // #include "kernels/12_kernel_double_buffering.cuh"

@@ -251,36 +251,6 @@ void runConv2d1DBlocktiling(int M, int N, double *A, double *B) {
       <<<gridDim, blockDim, smem_bytes>>>(M, N, A, B);
 }
 
-// void runConv2d2DBlocktiling(int M, int N, double *A, double *B) {
-//   const uint TM = 8;
-//   const uint TN = 8;
-//   if (M >= 128 and N >= 128) {
-//     const uint BM = 128;
-//     const uint BN = 128;
-//     dim3 gridDim(CEIL_DIV(N, BN), CEIL_DIV(M, BM));
-//     dim3 blockDim((BM * BN) / (TM * TN));
-//     // Add before kernel launch:
-//     cudaFuncSetAttribute(conv2d2DBlocktiling<128,128,8,8>, 
-//                     cudaFuncAttributeMaxDynamicSharedMemorySize, 
-//                     135200);  // Increase to almost 132KB if hardware allows
-//     conv2d2DBlocktiling<BM, BN, TM, TN>
-//         <<<gridDim, blockDim, 135200>>>(M, N, A, B);
-//   } else {
-//     // this is a hacky solution to the underlying problem
-//     // of not having proper bounds checking in the kernel
-//     const uint BM = 64;
-//     const uint BN = 64;
-//     dim3 gridDim(CEIL_DIV(N, BN), CEIL_DIV(M, BM));
-//     dim3 blockDim((BM * BN) / (TM * TN));
-//     // Add before kernel launch:
-//     cudaFuncSetAttribute(conv2d2DBlocktiling<64,64,8,8>, 
-//                     cudaFuncAttributeMaxDynamicSharedMemorySize, 
-//                     34848);  
-//     conv2d2DBlocktiling<BM, BN, TM, TN>
-//         <<<gridDim, blockDim, 34848>>>(M, N, A, B);
-//   }
-// }
-
 void runConv2dVectorize(int M, int N, double *A, double *B) {
 
   const uint BM = 256;
@@ -303,212 +273,31 @@ void runConv2dVectorize(int M, int N, double *A, double *B) {
       <<<gridDim, blockDim, smem_bytes>>>(M, N, A, B);
 }
 
-// void runConv2dResolveBankConflicts(int M, int N, double *A, double *B) {
-//   const uint BK = 8;
-//   const uint TM = 8;
-//   const uint TN = 8;
-//   if (M >= 128 and N >= 128) {
-//     const uint BM = 128;
-//     const uint BN = 128;
-//     dim3 gridDim(CEIL_DIV(N, BN), CEIL_DIV(M, BM));
-//     dim3 blockDim((BM * BN) / (TM * TN));
-//     conv2dResolveBankConflicts<BM, BN, BK, TM, TN>
-//         <<<gridDim, blockDim>>>(M, N, A, B);
-//   } else {
-//     // this is a hacky solution to the underlying problem
-//     // of not having proper bounds checking in the kernel
-//     const uint BM = 64;
-//     const uint BN = 64;
-//     dim3 gridDim(CEIL_DIV(N, BN), CEIL_DIV(M, BM));
-//     dim3 blockDim((BM * BN) / (TM * TN));
-//     conv2dResolveBankConflicts<BM, BN, BK, TM, TN>
-//         <<<gridDim, blockDim>>>(M, N, A, B);
-//   }
-// }
+void runConv2dDoubleBuffering(int M, int N, double *A, double *B) {
 
-// void runConv2dResolveBankExtraCol(int M, int N, double *A, double *B) {
-//   const uint BK = 8;
-//   const uint TM = 8;
-//   const uint TN = 8;
-//   if (M >= 128 and N >= 128) {
-//     const uint BM = 128;
-//     const uint BN = 128;
-//     dim3 gridDim(CEIL_DIV(N, BN), CEIL_DIV(M, BM));
-//     dim3 blockDim((BM * BN) / (TM * TN));
-//     conv2dResolveBankExtraCol<BM, BN, BK, TM, TN>
-//         <<<gridDim, blockDim>>>(M, N, A, B);
-//   } else {
-//     // this is a hacky solution to the underlying problem
-//     // of not having proper bounds checking in the kernel
-//     const uint BM = 64;
-//     const uint BN = 64;
-//     dim3 gridDim(CEIL_DIV(N, BN), CEIL_DIV(M, BM));
-//     dim3 blockDim((BM * BN) / (TM * TN));
-//     conv2dResolveBankExtraCol<BM, BN, BK, TM, TN>
-//         <<<gridDim, blockDim>>>(M, N, A, B);
-//   }
-// }
+  const uint BM = 128;
+  const uint BN = 128;
+  const uint ROWS_PER_BLOCK = 4;
+  dim3 gridDim(CEIL_DIV(N, BN), CEIL_DIV(M, BM));
 
-// void runConv2dAutotuned(int M, int N, double *A, double *B) {
-//   // A100
-//   // const uint K9_BK = 16;
-//   // const uint K9_TM = 4;
-//   // const uint K9_TN = 4;
-//   // const uint K9_BM = 64;
-//   // const uint K9_BN = 64;
-//   // A6000
-//   const uint K9_BK = 16;
-//   const uint K9_TM = 8;
-//   const uint K9_TN = 8;
-//   const uint K9_BM = 128;
-//   const uint K9_BN = 128;
-//   dim3 blockDim(K9_NUM_THREADS);
+  // Add extra storage to ensure 128-byte alignment
+  // int smem_bytes = (CEIL_DIV((ROWS_PER_BLOCK + 2) * (BN + 2) , 16) + 1) * 16 * 8;
+  int smem_bytes = 3072 * 8;
+  // Set max shared memory for the device
+  cudaFuncSetAttribute(conv2d1DBlocktiling<BM, BN, ROWS_PER_BLOCK>, 
+      cudaFuncAttributeMaxDynamicSharedMemorySize, 
+      smem_bytes);
+  // There are BM * BN elements to be calculated by this block. 
+  // This will happen in batches of ROWS_PER_BLOCK * BN such that each thread 
+  // calculates 1 output element
+  dim3 blockDim(ROWS_PER_BLOCK * BN);
 
-//   static_assert(
-//       (K9_NUM_THREADS * 4) % K9_BK == 0,
-//       "NUM_THREADS*4 must be multiple of K9_BK to avoid quantization issues "
-//       "during GMEM->SMEM tiling (loading only parts of the final row of Bs "
-//       "during each iteraion)");
-//   static_assert(
-//       (K9_NUM_THREADS * 4) % K9_BN == 0,
-//       "NUM_THREADS*4 must be multiple of K9_BN to avoid quantization issues "
-//       "during GMEM->SMEM tiling (loading only parts of the final row of As "
-//       "during each iteration)");
-//   static_assert(
-//       K9_BN % (16 * K9_TN) == 0,
-//       "K9_BN must be a multiple of 16*K9_TN to avoid quantization effects");
-//   static_assert(
-//       K9_BM % (16 * K9_TM) == 0,
-//       "K9_BM must be a multiple of 16*K9_TM to avoid quantization effects");
-//   static_assert((K9_BM * K9_BK) % (4 * K9_NUM_THREADS) == 0,
-//                 "K9_BM*K9_BK must be a multiple of 4*256 to vectorize loads");
-//   static_assert((K9_BN * K9_BK) % (4 * K9_NUM_THREADS) == 0,
-//                 "K9_BN*K9_BK must be a multiple of 4*256 to vectorize loads");
-
-//   dim3 gridDim(CEIL_DIV(N, K9_BN), CEIL_DIV(M, K9_BM));
-//   conv2dAutotuned<K9_BM, K9_BN, K9_BK, K9_TM, K9_TN>
-//       <<<gridDim, blockDim>>>(M, N, A, B);
-// }
-
-// void runConv2dWarptiling(int M, int N, double *A, double *B) {
-//   // Settings for A100
-//   // const uint K10_NUM_THREADS = 128;
-//   // const uint K10_BN = 128;
-//   // const uint K10_BM = 64;
-//   // const uint K10_BK = 16;
-//   // const uint K10_WN = 64;
-//   // const uint K10_WM = 32;
-//   // const uint K10_WNITER = 1;
-//   // const uint K10_TN = 4;
-//   // const uint K10_TM = 4;
-//   // Settings for A6000
-//   const uint K10_NUM_THREADS = 128;
-//   const uint K10_BN = 128;
-//   const uint K10_BM = 128;
-//   const uint K10_BK = 16;
-//   const uint K10_WN = 64;
-//   const uint K10_WM = 64;
-//   const uint K10_WNITER = 4;
-//   const uint K10_TN = 4;
-//   const uint K10_TM = 8;
-//   dim3 blockDim(K10_NUM_THREADS);
-
-//   constexpr uint NUM_WARPS = K10_NUM_THREADS / 32;
-
-//   // warptile in threadblocktile
-//   static_assert((K10_BN % K10_WN == 0) and (K10_BM % K10_WM == 0));
-//   static_assert((K10_BN / K10_WN) * (K10_BM / K10_WM) == NUM_WARPS);
-
-//   // threads in warpsubtile
-//   static_assert((K10_WM * K10_WN) % (WARPSIZE * K10_TM * K10_TN * K10_WNITER) ==
-//                 0);
-//   constexpr uint K10_WMITER =
-//       (K10_WM * K10_WN) / (32 * K10_TM * K10_TN * K10_WNITER);
-//   // warpsubtile in warptile
-//   static_assert((K10_WM % K10_WMITER == 0) and (K10_WN % K10_WNITER == 0));
-
-//   static_assert((K10_NUM_THREADS * 4) % K10_BK == 0,
-//                 "NUM_THREADS*4 must be multiple of K9_BK to avoid quantization "
-//                 "issues during GMEM->SMEM tiling (loading only parts of the "
-//                 "final row of Bs during each iteraion)");
-//   static_assert((K10_NUM_THREADS * 4) % K10_BN == 0,
-//                 "NUM_THREADS*4 must be multiple of K9_BN to avoid quantization "
-//                 "issues during GMEM->SMEM tiling (loading only parts of the "
-//                 "final row of As during each iteration)");
-//   static_assert(K10_BN % (16 * K10_TN) == 0,
-//                 "BN must be a multiple of 16*TN to avoid quantization effects");
-//   static_assert(K10_BM % (16 * K10_TM) == 0,
-//                 "BM must be a multiple of 16*TM to avoid quantization effects");
-//   static_assert((K10_BM * K10_BK) % (4 * K10_NUM_THREADS) == 0,
-//                 "BM*BK must be a multiple of 4*256 to vectorize loads");
-//   static_assert((K10_BN * K10_BK) % (4 * K10_NUM_THREADS) == 0,
-//                 "BN*BK must be a multiple of 4*256 to vectorize loads");
-
-//   dim3 gridDim(CEIL_DIV(N, K10_BN), CEIL_DIV(M, K10_BM));
-//   conv2dWarptiling<K10_BM, K10_BN, K10_BK, K10_WM, K10_WN, K10_WNITER, K10_TM,
-//                   K10_TN, K10_NUM_THREADS>
-//       <<<gridDim, blockDim>>>(M, N, A, B);
-// }
-
-// void runConv2dDoubleBuffering(int M, int N, double *A, double *B) {
-//   // Settings for A100
-//   // const uint K11_NUM_THREADS = 256;
-//   // const uint K11_BN = 128;
-//   // const uint K11_BM = 64;
-//   // const uint K11_BK = 16;
-//   // const uint K11_WN = 32;
-//   // const uint K11_WM = 32;
-//   // const uint K11_WNITER = 2;
-//   // const uint K11_TN = 4;
-//   // const uint K11_TM = 4;
-//   // Settings for A6000
-//   const uint K11_NUM_THREADS = 256;
-//   const uint K11_BN = 256;
-//   const uint K11_BM = 128;
-//   const uint K11_BK = 16;
-//   const uint K11_WN = 32;
-//   const uint K11_WM = 128;
-//   const uint K11_WNITER = 1;
-//   const uint K11_TN = 8;
-//   const uint K11_TM = 8;
-//   dim3 blockDim(K11_NUM_THREADS);
-
-//   constexpr uint NUM_WARPS = K11_NUM_THREADS / 32;
-
-//   // warptile in threadblocktile
-//   static_assert((K11_BN % K11_WN == 0) and (K11_BM % K11_WM == 0));
-//   static_assert((K11_BN / K11_WN) * (K11_BM / K11_WM) == NUM_WARPS);
-
-//   // threads in warpsubtile
-//   static_assert((K11_WM * K11_WN) % (WARPSIZE * K11_TM * K11_TN * K11_WNITER) ==
-//                 0);
-//   constexpr uint K11_WMITER =
-//       (K11_WM * K11_WN) / (32 * K11_TM * K11_TN * K11_WNITER);
-//   // warpsubtile in warptile
-//   static_assert((K11_WM % K11_WMITER == 0) and (K11_WN % K11_WNITER == 0));
-
-//   static_assert((K11_NUM_THREADS / 2 * 4) % K11_BK == 0,
-//                 "NUM_THREADS*4 must be multiple of BK to avoid quantization "
-//                 "issues during GMEM->SMEM tiling (loading only parts of the "
-//                 "final row of Bs during each iteraion)");
-//   static_assert((K11_NUM_THREADS / 2 * 4) % K11_BN == 0,
-//                 "NUM_THREADS*4 must be multiple of BN to avoid quantization "
-//                 "issues during GMEM->SMEM tiling (loading only parts of the "
-//                 "final row of As during each iteration)");
-//   static_assert(K11_BN % (16 * K11_TN) == 0,
-//                 "BN must be a multiple of 16*TN to avoid quantization effects");
-//   static_assert(K11_BM % (16 * K11_TM) == 0,
-//                 "BM must be a multiple of 16*TM to avoid quantization effects");
-//   static_assert((K11_BM * K11_BK) % (4 * K11_NUM_THREADS / 2) == 0,
-//                 "BM*BK must be a multiple of 4*256 to vectorize loads");
-//   static_assert((K11_BN * K11_BK) % (4 * K11_NUM_THREADS / 2) == 0,
-//                 "BN*BK must be a multiple of 4*256 to vectorize loads");
-
-//   dim3 gridDim(CEIL_DIV(N, K11_BN), CEIL_DIV(M, K11_BM));
-//   // conv2dDoubleBuffering<K11_BM, K11_BN, K11_BK, K11_WM, K11_WN, K11_WNITER,
-//   //                      K11_TM, K11_TN, K11_NUM_THREADS>
-//   //     <<<gridDim, blockDim>>>(M, N, A, B);
-// }
+  assert( blockDim.x < 1025);
+  dim3 gridDim(CEIL_DIV(N, BN), CEIL_DIV(M, BM));
+  conv2dDoubleBuffering<BM, BN, ROWS_PER_BLOCK>
+      <<<gridDim, blockDim, smem_bytes>>>(get_tensor_map(A, M, N, BM, BN), 
+                                          M, N, A, B);
+}
 
 // void runConv2dDoubleBuffering2(int M, int N, double *A, double *B) {
 //   // Settings for A6000
@@ -598,9 +387,9 @@ void run_kernel(int kernel_num, int M, int N, double *A, double *B) {
   // case 10:
   //   runConv2dWarptiling(M, N, A, B);
   //   break;
-  // case 11:
-  //   runConv2dDoubleBuffering(M, N, A, B);
-  //   break;
+  case 11:
+    runConv2dDoubleBuffering(M, N, A, B);
+    break;
   // case 12:
   //   runConv2dDoubleBuffering2(M, N, A, B);
   //   break;
