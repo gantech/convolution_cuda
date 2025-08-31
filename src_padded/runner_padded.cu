@@ -278,7 +278,6 @@ void runConv2dDoubleBuffering(int M, int N, double *A, double *B) {
   const uint BM = 128;
   const uint BN = 128;
   const uint ROWS_PER_BLOCK = 4;
-  dim3 gridDim(CEIL_DIV(N, BN), CEIL_DIV(M, BM));
 
   // Add extra storage to ensure 128-byte alignment
   // int smem_bytes = (CEIL_DIV((ROWS_PER_BLOCK + 2) * (BN + 2) , 16) + 1) * 16 * 8;
@@ -295,7 +294,7 @@ void runConv2dDoubleBuffering(int M, int N, double *A, double *B) {
   assert( blockDim.x < 1025);
   dim3 gridDim(CEIL_DIV(N, BN), CEIL_DIV(M, BM));
   conv2dDoubleBuffering<BM, BN, ROWS_PER_BLOCK>
-      <<<gridDim, blockDim, smem_bytes>>>(get_tensor_map(A, M, N, BM, BN), 
+      <<<gridDim, blockDim, smem_bytes>>>(get_tensor_map(A, M, N, ROWS_PER_BLOCK, BN), 
                                           M, N, A, B);
 }
 

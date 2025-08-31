@@ -26,12 +26,12 @@ __global__ void conv2dDoubleBuffering(const __grid_constant__ CUtensorMap tensor
 
   extern __shared__ SharedMemory shared_mem[];
 
-  double* As[2] = {reinterpret_cast<double*>(shared_mem),
-                   reinterpret_cast<double*>(shared_mem + 1024)};
+  double* As[2] ;
+  As[0] = reinterpret_cast<double*>(shared_mem);
+  As[1] = As[0] + 1024;
 
-  double* Bs[2] = {reinterpret_cast<double*>(shared_mem + 2048),
-                   reinterpret_cast<double*>(shared_mem + 2560)};
-
+  double* Bs[2] = {As[0] + 2048,
+                   As[0] + 2560};
 
   // Initialize shared memory barrier with the number of threads participating in the barrier.
   #pragma nv_diag_suppress static_var_with_dynamic_init
@@ -45,10 +45,11 @@ __global__ void conv2dDoubleBuffering(const __grid_constant__ CUtensorMap tensor
   __syncthreads();
   barrier::arrival_token token[2];
   if (threadIdx.x == 0) {
-    cde::cp_async_bulk_tensor_2d_global_to_shared(As, &tensor_map_a, cCol * BLOCKSIZE, cRow * BLOCKSIZE, bar[0]);
-    token[0] = cuda::device::barrier_arrive_tx(bar[0], 1, (ROWS_PER_BLOCK+2) * (BLOCKSIZE+2) * sizeof(double));
-  } else
+    cde::cp_async_bulk_tensor_2d_global_to_shared(As[0], &tensor_map_a, cCol * BN, cRow * BM, bar[0]);
+    token[0] = cuda::device::barrier_arrive_tx(bar[0], 1, (ROWS_PER_BLOCK+2) * (BN+2) * sizeof(double));
+  } else {
     token[0] = bar[0].arrive();
+  }
   bar[0].wait(std::move(token[0]));
 
   // TODO: Initiate TMA setup for sending Bs back to global memory
@@ -58,13 +59,14 @@ __global__ void conv2dDoubleBuffering(const __grid_constant__ CUtensorMap tensor
     int idx = (i / ROWS_PER_BLOCK) % 2;
 
     if (threadIdx.x == 0) {
-      cde::cp_async_bulk_tensor_2d_global_to_shared(As[idx], &tensor_map_a, cCol * BLOCKSIZE, cRow * BLOCKSIZE + i, bar[idx]);
-      token[idx] = cuda::device::barrier_arrive_tx(bar[idx], 1,  (ROWS_PER_BLOCK+2) * (BLOCKSIZE+2) * sizeof(double));
-    } else
+      cde::cp_async_bulk_tensor_2d_global_to_shared(As[idx], &tensor_map_a, cCol * BN, cRow * BM + i, bar[idx]);
+      token[idx] = cuda::device::barrier_arrive_tx(bar[idx], 1,  (ROWS_PER_BLOCK+2) * (BN+2) * sizeof(double));
+    } else {
       token[idx] = bar[idx].arrive();
+    }
 
     // TODO: Do whatever computation you want with previously loaded block and store into Bs[idx_prev]
-    int idx_prev = i ^ 1;
+    int idx_prev = idx ^ 1;
 
 
     // Receive data from global memory
