@@ -50,10 +50,17 @@ __global__ void conv2dDoubleBuffering(const __grid_constant__ CUtensorMap tensor
   } else {
     token[0] = bar[0].arrive();
   }
+
+  const int threadRow = threadIdx.x / BN;
+  const int threadCol = threadIdx.x % BN;
+
+  double filter[9] = {-1.0, -1.0, -1.0,
+            -1.0, 8.0, -1.0,
+            -1.0, -1.0, -1.0};  
+
   bar[0].wait(std::move(token[0]));
 
   // TODO: Initiate TMA setup for sending Bs back to global memory
-
   for (int i = ROWS_PER_BLOCK; i < BM; i += ROWS_PER_BLOCK) {
 
     int idx = (i / ROWS_PER_BLOCK) % 2;
@@ -65,9 +72,17 @@ __global__ void conv2dDoubleBuffering(const __grid_constant__ CUtensorMap tensor
       token[idx] = bar[idx].arrive();
     }
 
-    // TODO: Do whatever computation you want with previously loaded block and store into Bs[idx_prev]
     int idx_prev = idx ^ 1;
 
+    double tmp = 0.0;
+    for (int fi = -1 ; fi < 2; fi++) {
+      for (int fj = -1; fj < 2; fj++) { 
+        tmp += As[idx_prev][(threadRow + fi + 1) * (BN + 2) + (threadCol + fj + 1)] * filter[(fi + 1) * 3 + (fj + 1)];
+      }
+    }
+
+    // Store the result into Bs[idx_prev]
+    Bs[idx_prev][threadRow * BN + threadCol] = tmp;
 
     // Receive data from global memory
     bar[idx].wait(std::move(token[idx]));
