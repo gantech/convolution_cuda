@@ -175,13 +175,13 @@ CUtensorMap get_tensor_map(double *A, const int M, const int N,
   CUtensorMap tensor_map_a{};
   // rank is the number of dimensions of the array.
   constexpr uint32_t rank = 2;
-  uint64_t size[rank] = {M+2, N+2};
+  uint64_t size[rank] = {M, N};
   // The stride is the number of bytes to traverse from the first element of one row to the next.
   // It must be a multiple of 16.
-  uint64_t stride[rank - 1] = {(N+2) * sizeof(double)};
+  uint64_t stride[rank - 1] = {(N) * sizeof(double)};
   // The box_size is the size of the shared memory buffer that is used as the
   // destination of a TMA transfer.
-  uint32_t box_size[rank] = {BM+2, BN+2};
+  uint32_t box_size[rank] = {BM, BN};
   // The distance between elements in units of sizeof(element). A stride of 2
   // can be used to load only the real component of a complex-valued tensor, for instance.
   uint32_t elem_stride[rank] = {1, 1};
@@ -227,7 +227,7 @@ void run_conv2d_shared_mem_tma(int M, int N, double *A, double *B) {
                        cudaFuncAttributePreferredSharedMemoryCarveout,
                        cudaSharedmemCarveoutMaxShared);
   conv2d_shared_mem_tma<32>
-      <<<gridDim, blockDim>>>(get_tensor_map(A, M, N, BM, BN), M, N, A, B);
+      <<<gridDim, blockDim>>>(get_tensor_map(A, M+2, N+2, BM+2, BN+2), M, N, A, B);
 }
 
 void runConv2d1DBlocktiling(int M, int N, double *A, double *B) {
@@ -294,7 +294,8 @@ void runConv2dDoubleBuffering(int M, int N, double *A, double *B) {
   assert( blockDim.x < 1025);
   dim3 gridDim(CEIL_DIV(N, BN), CEIL_DIV(M, BM));
   conv2dDoubleBuffering<BM, BN, ROWS_PER_BLOCK>
-      <<<gridDim, blockDim, smem_bytes>>>(get_tensor_map(A, M, N, ROWS_PER_BLOCK, BN), 
+      <<<gridDim, blockDim, smem_bytes>>>(get_tensor_map(A, M+2, N+2, ROWS_PER_BLOCK+2, BN+2),
+                                          get_tensor_map(B, M, N, ROWS_PER_BLOCK, BN),
                                           M, N, A, B);
 }
 

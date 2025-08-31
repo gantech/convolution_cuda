@@ -18,7 +18,8 @@ union SharedMemory {
 };
 
 template <const int BM, const int BN, const int ROWS_PER_BLOCK>
-__global__ void conv2dDoubleBuffering(const __grid_constant__ CUtensorMap tensor_map_a, 
+__global__ void conv2dDoubleBuffering(const __grid_constant__ CUtensorMap tensor_map_a,
+                                      const __grid_constant__ CUtensorMap tensor_map_b,
                                       int M, int N, const double *A, double *B) {
 
   const uint cRow = blockIdx.y;
@@ -35,10 +36,12 @@ __global__ void conv2dDoubleBuffering(const __grid_constant__ CUtensorMap tensor
 
   // Initialize shared memory barrier with the number of threads participating in the barrier.
   #pragma nv_diag_suppress static_var_with_dynamic_init
-  __shared__ barrier bar[2];
+  __shared__ barrier bar_a[2];
+  //__shared__ barrier bar_b[2];
   if (threadIdx.x == 0) {
     for (int i = 0; i < 2; i++) {
-      init(&bar[i], blockDim.x);
+      init(&bar_a[i], blockDim.x);
+      //init(&bar_b[i], blockDim.x);
     }
     cde::fence_proxy_async_shared_cta();
   }
@@ -66,10 +69,10 @@ __global__ void conv2dDoubleBuffering(const __grid_constant__ CUtensorMap tensor
     int idx = (i / ROWS_PER_BLOCK) % 2;
 
     if (threadIdx.x == 0) {
-      cde::cp_async_bulk_tensor_2d_global_to_shared(As[idx], &tensor_map_a, cCol * BN, cRow * BM + i, bar[idx]);
-      token[idx] = cuda::device::barrier_arrive_tx(bar[idx], 1,  (ROWS_PER_BLOCK+2) * (BN+2) * sizeof(double));
+      cde::cp_async_bulk_tensor_2d_global_to_shared(As[idx], &tensor_map_a, cCol * BN, cRow * BM + i, bar_a[idx]);
+      token[idx] = cuda::device::barrier_arrive_tx(bar_a[idx], 1,  (ROWS_PER_BLOCK+2) * (BN+2) * sizeof(double));
     } else {
-      token[idx] = bar[idx].arrive();
+      token[idx] = bar_a[idx].arrive();
     }
 
     int idx_prev = idx ^ 1;
@@ -84,10 +87,25 @@ __global__ void conv2dDoubleBuffering(const __grid_constant__ CUtensorMap tensor
     // Store the result into Bs[idx_prev]
     Bs[idx_prev][threadRow * BN + threadCol] = tmp;
 
-    // Receive data from global memory
-    bar[idx].wait(std::move(token[idx]));
+    // Wait for shared memory writes to be visible to TMA engine.
+    cde::fence_proxy_async_shared_cta();
+    __syncthreads();
+    // After syncthreads, writes by all threads are visible to TMA engine.
 
-    // TODO: Send Bs data in idx_prev back from shared to global memory
+    // Initiate TMA transfer to copy shared memory to global memory
+    if (threadIdx.x == 0) {
+      cde::cp_async_bulk_tensor_2d_shared_to_global(&tensor_map_b, cCol * BN, cRow * BM + i - ROWS_PER_BLOCK,
+                                                    Bs[idx_prev]);
+      // Wait for TMA transfer to have finished reading shared memory.
+      // Create a "bulk async-group" out of the previous bulk copy operation.
+      cde::cp_async_bulk_commit_group();
+      // Wait for the group to have completed reading from shared memory.
+      cde::cp_async_bulk_wait_group_read<0>();
+    }
+
+    // Receive data from global memory
+    bar_a[idx].wait(std::move(token[idx]));
+
 
   }
 
