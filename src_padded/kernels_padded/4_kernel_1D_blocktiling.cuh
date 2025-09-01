@@ -5,14 +5,8 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cuda_runtime.h>
-#include <cuda.h>
-#include <cudaTypedefs.h> // PFN_cuTensorMapEncodeTiled, CUtensorMap
-#include <cuda/barrier>
 
 #define CEIL_DIV(M, N) (((M) + (N)-1) / (N))
-
-using barrier = cuda::barrier<cuda::thread_scope_block>;
-namespace cde = cuda::device::experimental;
 
 template <const int BM, const int BN, const int TM>
 __global__ void conv2d1DBlocktiling(int M, int N, const double *A, double *B) {
@@ -55,6 +49,5 @@ __global__ void conv2d1DBlocktiling(int M, int N, const double *A, double *B) {
   // advance pointers to the starting positions
   for (int ti = 0; ti < TM; ti++) {
       B[(cRow * BM + threadRow * TM + ti) * N + cCol * BN + threadCol] = threadResults[ti];
-  }
-
+  }  
 }

@@ -29,6 +29,8 @@ __global__ void conv2dVectorize(int M, int N, const double *A, double *B) {
     }
   }
 
+  __syncthreads();
+
   // each warp will calculate 32*TM elements, with 32 being the columnar dim.
   const int threadCol = threadIdx.x % BN;
   const int threadRow = threadIdx.x / BN;
@@ -40,9 +42,9 @@ __global__ void conv2dVectorize(int M, int N, const double *A, double *B) {
           -1.0, 8.0, -1.0,
           -1.0, -1.0, -1.0};
 
-  for (int fi = -1 ; fi < 2; fi++) {
+  for (int fi = -1; fi < 2; fi++) {
     for (int fj = -1; fj < 2; fj++) { 
-       for (int ti = 0; ti < TM; ti++) {
+      for (int ti = 0; ti < TM; ti++) {
           threadResults[ti] += As[(threadRow * TM + ti + fi + 1) * (BN + 2) + (threadCol + fj + 1)] * filter[(fi + 1) * 3 + (fj + 1)];
        }
     }
