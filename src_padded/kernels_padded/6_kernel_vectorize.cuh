@@ -18,12 +18,12 @@ __global__ void conv2dVectorize(int M, int N, const double *A, double *B) {
   // Each block loads (BM+2) x (BN+2) elements into shared memory
   if (threadIdx.x <  (BM+2)*(BN+2)/2) {
     for (int i = threadIdx.x; i < (BM+2)*(BN+2)/2; i += blockDim.x) {
-      int smem_row = 2 * i / (BN+2);
+      int smem_row = (2 * i) / (BN+2);
       int smem_col = (2 * i) % (BN+2);
       int g_row = cRow * BM + smem_row;
       int g_col = cCol * BN + smem_col;
       double2 tmp =
-          reinterpret_cast<const double2 *>(&A[g_row * N + g_col])[0];
+          reinterpret_cast<const double2 *>(&A[g_row * (N+2) + g_col])[0];
       As[smem_row * (BN+2) + smem_col] = tmp.x;
       As[smem_row * (BN+2) + smem_col + 1] = tmp.y;
     }
@@ -31,7 +31,7 @@ __global__ void conv2dVectorize(int M, int N, const double *A, double *B) {
 
   // each warp will calculate 32*TM elements, with 32 being the columnar dim.
   const int threadCol = threadIdx.x % BN;
-  const int threadRow = threadIdx.x / (BN * TM);
+  const int threadRow = threadIdx.x / BN;
     
   // allocate thread-local cache for results in registerfile
   double threadResults[TM] = {0.0};

@@ -1,7 +1,7 @@
 #pragma once
 
 
-// #include "kernels/0_cudnn.cuh"
+#include "kernels/0_cudnn.cuh"
 #include "kernels_padded/1_naive_padded.cuh"
 #include "kernels_padded/2_kernel_global_mem_coalesce_padded.cuh"
 #include "kernels_padded/3_kernel_shared_mem_blocking.cuh"

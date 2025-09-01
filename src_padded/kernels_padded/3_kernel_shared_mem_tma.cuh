@@ -66,10 +66,10 @@ __global__ void conv2d_shared_mem_tma(const __grid_constant__ CUtensorMap tensor
     }
   }
 
-  // // advance pointers to the starting positions
-  // B += cRow * BLOCKSIZE * N + cCol * BLOCKSIZE;
+  // advance pointers to the starting positions
+  B += cRow * BLOCKSIZE * N + cCol * BLOCKSIZE;
 
-  // B[threadRow * N + threadCol] = tmp;
+  B[threadRow * N + threadCol] = tmp;
 
   if (threadIdx.x == 0) {
     (&bar)->~barrier();

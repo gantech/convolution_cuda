@@ -60,7 +60,7 @@ void CudaDeviceInfo() {
          props.multiProcessorCount, props.warpSize);
 };
 
-void randomize_matrix(double *mat, int M, int N) {
+void randomize_matrix(double *mat, double * mat_nonpad, int M, int N) {
   // NOTICE: Use gettimeofday instead of srand((unsigned)time(NULL)); the time
   // precision is too low and the same random number is generated.
   struct timeval time {};
@@ -74,6 +74,7 @@ void randomize_matrix(double *mat, int M, int N) {
         double tmp = (double)(rand() % 5) + 0.01 * (rand() % 5);
         tmp = (rand() % 2 == 0) ? tmp : tmp * (-1.);
         mat[(i+1) * (N+2) + (j+1)] = tmp;
+        mat_nonpad[ i * N + j] = tmp;
     }
   }
 
@@ -287,8 +288,8 @@ float run_conv2d_shared_mem_tma(int M, int N, double *A, double *B, int n_repeat
 }
 
 float runConv2d1DBlocktiling(int M, int N, double *A, double *B, int n_repeat) {
-  const uint BM = 256;
-  const uint BN = 64;
+  const uint BM = 128;
+  const uint BN = 128;
   const uint TM = 16;
   dim3 gridDim(CEIL_DIV(N, BN), CEIL_DIV(M, BM));
 
@@ -323,8 +324,8 @@ float runConv2d1DBlocktiling(int M, int N, double *A, double *B, int n_repeat) {
 
 float runConv2dVectorize(int M, int N, double *A, double *B, int n_repeat) {
 
-  const uint BM = 256;
-  const uint BN = 64;
+  const uint BM = 128;
+  const uint BN = 128;
   const uint TM = 16;
   dim3 gridDim(CEIL_DIV(N, BN), CEIL_DIV(M, BM));
 
@@ -398,9 +399,9 @@ float runConv2dDoubleBuffering(int M, int N, double *A, double *B, int n_repeat)
 
 float run_kernel(int kernel_num, int M, int N, double *A, double *B, int n_repeat) {
   switch (kernel_num) {
-  // case 0:
-  //   runCuDNNFP64(M, N, A, B);
-  //   break;
+  case 0:
+    runCuDNNFP64(M, N, A, B);
+    break;
   case 1:
     return run_conv2d_naive(M, N, A, B, n_repeat);
   case 2:

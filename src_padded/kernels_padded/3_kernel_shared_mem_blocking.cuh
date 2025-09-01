@@ -27,7 +27,7 @@ __global__ void conv2d_shared_mem_block(int M, int N,
   const uint threadRow = threadIdx.x / BLOCKSIZE;
 
   // advance pointers to the starting positions
-  B += (cRow * BLOCKSIZE + 1) * (N+2) + cCol * BLOCKSIZE + 1;
+  B += (cRow * BLOCKSIZE) * (N) + cCol * BLOCKSIZE;
 
   // Each block loads (BLOCKSIZE+2) x (BLOCKSIZE+2) elements into shared memory
   for (int i = threadIdx.x; i < (BLOCKSIZE+2)*(BLOCKSIZE+2); i += blockDim.x) {
@@ -47,6 +47,6 @@ __global__ void conv2d_shared_mem_block(int M, int N,
     }
   }
 
-  // B[threadRow * N + threadCol] = tmp;
+  B[threadRow * N + threadCol] = tmp;
 
 }
