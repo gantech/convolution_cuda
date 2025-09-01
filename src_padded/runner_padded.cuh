@@ -21,4 +21,4 @@ bool verify_matrix(double *mat1, double *mat2, int N);
 float get_current_sec();                        // Get the current moment
 float cpu_elapsed_time(float &beg, float &end); // Calculate time difference
 
-void run_kernel(int kernel_num, int m, int n, double *A, double * B);
+void run_kernel(int kernel_num, int m, int n, double *A, double * B, int n_repeat);

@@ -110,15 +110,8 @@ int main(int argc, char **argv) {
     if (kernel_num == 0)
       run_kernel(kernel_num, m, n, dA, dB);
     else {
-      cudaEventRecord(beg);
-      for (int j = 0; j < repeat_times; j++) {
-        // We don't reset dC between runs to save time
-        run_kernel(kernel_num, m, n, dA, dB);
-      }
-      cudaEventRecord(end);
-      cudaEventSynchronize(beg);
-      cudaEventSynchronize(end);
-      cudaEventElapsedTime(&elapsed_time, beg, end);
+      elapsed_time = run_kernel(kernel_num, m, n, dA, dB, repeat_times);
+
       elapsed_time /= 1000.; // Convert to seconds
 
       long flops = 9 * m * n;

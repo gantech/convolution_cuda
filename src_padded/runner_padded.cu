@@ -136,27 +136,69 @@ int div_ceil(int numerator, int denominator) {
   return res.rem ? (res.quot + 1) : res.quot;
 }
 
-void run_conv2d_naive(int M, int N, double *A, double *B) {
+float run_conv2d_naive(int M, int N, double *A, double *B) {
   dim3 gridDim(M/32, N/32);
   dim3 blockDim(32, 32);
-  conv2d_naive<<<gridDim, blockDim>>>(M, N, A, B);
+  // Using cudaEvent for gpu stream timing, cudaEvent is equivalent to
+  // publishing event tasks in the target stream
+  float elapsed_time;
+  cudaEvent_t beg, end;
+  cudaEventCreate(&beg);
+  cudaEventCreate(&end);
+  cudaEventRecord(beg);
+  for (int i = 0; i < n_repeat; i++) {
+    conv2d_naive<<<gridDim, blockDim>>>(M, N, A, B);
+  }
+  cudaEventRecord(end);
+  cudaEventSynchronize(beg);
+  cudaEventSynchronize(end);
+  cudaEventElapsedTime(&elapsed_time, beg, end);
+  return elapsed_time;
 }
 
-void run_conv2d_coalesce(int M, int N, double *A, double *B) {
+float run_conv2d_coalesce(int M, int N, double *A, double *B) {
   dim3 gridDim(CEIL_DIV(M, 32), CEIL_DIV(N, 32));
   dim3 blockDim(32, 32);
-  conv2d_global_mem_coalesce<32>
-      <<<gridDim, blockDim>>>(M, N, A, B);
+  // Using cudaEvent for gpu stream timing, cudaEvent is equivalent to
+  // publishing event tasks in the target stream
+  float elapsed_time;
+  cudaEvent_t beg, end;
+  cudaEventCreate(&beg);
+  cudaEventCreate(&end);
+  cudaEventRecord(beg);
+  for (int i = 0; i < n_repeat; i++) {
+    conv2d_global_mem_coalesce<32>
+        <<<gridDim, blockDim>>>(M, N, A, B);
+  }
+  cudaEventRecord(end);
+  cudaEventSynchronize(beg);
+  cudaEventSynchronize(end);
+  cudaEventElapsedTime(&elapsed_time, beg, end);
+  return elapsed_time;
 }
 
-void run_conv2d_shared_mem_block(int M, int N, double *A, double *B) {
+float run_conv2d_shared_mem_block(int M, int N, double *A, double *B) {
   dim3 gridDim(CEIL_DIV(M, 32), CEIL_DIV(N, 32));
   dim3 blockDim(32 * 32);
   cudaFuncSetAttribute(conv2d_shared_mem_block<32>,
                        cudaFuncAttributePreferredSharedMemoryCarveout,
                        cudaSharedmemCarveoutMaxShared);
-  conv2d_shared_mem_block<32>
-      <<<gridDim, blockDim>>>(M, N, A, B);
+  // Using cudaEvent for gpu stream timing, cudaEvent is equivalent to
+  // publishing event tasks in the target stream
+  float elapsed_time;
+  cudaEvent_t beg, end;
+  cudaEventCreate(&beg);
+  cudaEventCreate(&end);
+  cudaEventRecord(beg);
+  for (int i = 0; i < n_repeat; i++) {
+    conv2d_shared_mem_block<32>
+        <<<gridDim, blockDim>>>(M, N, A, B);
+  }
+  cudaEventRecord(end);
+  cudaEventSynchronize(beg);
+  cudaEventSynchronize(end);
+  cudaEventElapsedTime(&elapsed_time, beg, end);
+  return elapsed_time;
 }
 
 PFN_cuTensorMapEncodeTiled_v12000 get_cuTensorMapEncodeTiled() {
@@ -215,7 +257,7 @@ CUtensorMap get_tensor_map(double *A, const int M, const int N,
 
 }
 
-void run_conv2d_shared_mem_tma(int M, int N, double *A, double *B) {
+float run_conv2d_shared_mem_tma(int M, int N, double *A, double *B) {
 
   const int BM = 32;
   const int BN = 32;
@@ -226,11 +268,25 @@ void run_conv2d_shared_mem_tma(int M, int N, double *A, double *B) {
   cudaFuncSetAttribute(conv2d_shared_mem_tma<32>,
                        cudaFuncAttributePreferredSharedMemoryCarveout,
                        cudaSharedmemCarveoutMaxShared);
-  conv2d_shared_mem_tma<32>
-      <<<gridDim, blockDim>>>(get_tensor_map(A, M+2, N+2, BM+2, BN+2), M, N, A, B);
+  // Using cudaEvent for gpu stream timing, cudaEvent is equivalent to
+  // publishing event tasks in the target stream
+  float elapsed_time;
+  cudaEvent_t beg, end;
+  cudaEventCreate(&beg);
+  cudaEventCreate(&end);
+  cudaEventRecord(beg);
+  for (int i = 0; i < n_repeat; i++) {
+    conv2d_shared_mem_tma<32>
+        <<<gridDim, blockDim>>>(get_tensor_map(A, M+2, N+2, BM+2, BN+2), M, N, A, B);
+  }
+  cudaEventRecord(end);
+  cudaEventSynchronize(beg);
+  cudaEventSynchronize(end);
+  cudaEventElapsedTime(&elapsed_time, beg, end);
+  return elapsed_time;
 }
 
-void runConv2d1DBlocktiling(int M, int N, double *A, double *B) {
+float runConv2d1DBlocktiling(int M, int N, double *A, double *B) {
   const uint BM = 256;
   const uint BN = 64;
   const uint TM = 16;
@@ -245,13 +301,27 @@ void runConv2d1DBlocktiling(int M, int N, double *A, double *B) {
   // There are BM * BN elements to be calculated by this block 
   // by BM * BN / TM threads such that each thread calculates TM elements.
   dim3 blockDim((BM * BN) / TM);
-
   assert( blockDim.x < 1025);
-  conv2d1DBlocktiling<BM, BN, TM>
-      <<<gridDim, blockDim, smem_bytes>>>(M, N, A, B);
+
+  // Using cudaEvent for gpu stream timing, cudaEvent is equivalent to
+  // publishing event tasks in the target stream
+  float elapsed_time;
+  cudaEvent_t beg, end;
+  cudaEventCreate(&beg);
+  cudaEventCreate(&end);
+  cudaEventRecord(beg);
+  for (int i = 0; i < n_repeat; i++) {
+    conv2d1DBlocktiling<BM, BN, TM>
+        <<<gridDim, blockDim, smem_bytes>>>(M, N, A, B);
+  }
+  cudaEventRecord(end);
+  cudaEventSynchronize(beg);
+  cudaEventSynchronize(end);
+  cudaEventElapsedTime(&elapsed_time, beg, end);
+  return elapsed_time;
 }
 
-void runConv2dVectorize(int M, int N, double *A, double *B) {
+float runConv2dVectorize(int M, int N, double *A, double *B) {
 
   const uint BM = 256;
   const uint BN = 64;
@@ -267,13 +337,26 @@ void runConv2dVectorize(int M, int N, double *A, double *B) {
   // There are BM * BN elements to be calculated by this block 
   // by BM * BN / TM threads such that each thread calculates TM elements.
   dim3 blockDim((BM * BN) / TM);
-
   assert( blockDim.x < 1025);
-  conv2dVectorize<BM, BN, TM>
-      <<<gridDim, blockDim, smem_bytes>>>(M, N, A, B);
+  // Using cudaEvent for gpu stream timing, cudaEvent is equivalent to
+  // publishing event tasks in the target stream
+  float elapsed_time;
+  cudaEvent_t beg, end;
+  cudaEventCreate(&beg);
+  cudaEventCreate(&end);
+  cudaEventRecord(beg);
+  for (int i = 0; i < n_repeat; i++) {
+    conv2dVectorize<BM, BN, TM>
+        <<<gridDim, blockDim, smem_bytes>>>(M, N, A, B);
+  }
+  cudaEventRecord(end);
+  cudaEventSynchronize(beg);
+  cudaEventSynchronize(end);
+  cudaEventElapsedTime(&elapsed_time, beg, end);
+  return elapsed_time;
 }
 
-void runConv2dDoubleBuffering(int M, int N, double *A, double *B) {
+float runConv2dDoubleBuffering(int M, int N, double *A, double *B) {
 
   const uint BM = 128;
   const uint BN = 128;
@@ -293,88 +376,47 @@ void runConv2dDoubleBuffering(int M, int N, double *A, double *B) {
 
   assert( blockDim.x < 1025);
   dim3 gridDim(CEIL_DIV(N, BN), CEIL_DIV(M, BM));
-  conv2dDoubleBuffering<BM, BN, ROWS_PER_BLOCK>
+
+  // Using cudaEvent for gpu stream timing, cudaEvent is equivalent to
+  // publishing event tasks in the target stream
+  float elapsed_time;
+  cudaEvent_t beg, end;
+  cudaEventCreate(&beg);
+  cudaEventCreate(&end);
+  cudaEventRecord(beg);
+  for (int i = 0; i < n_repeat; i++)
+    conv2dDoubleBuffering<BM, BN, ROWS_PER_BLOCK>
       <<<gridDim, blockDim, smem_bytes>>>(get_tensor_map(A, M+2, N+2, ROWS_PER_BLOCK+2, BN+2),
                                           get_tensor_map(B, M, N, ROWS_PER_BLOCK, BN),
                                           M, N, A, B);
+  cudaEventRecord(end);
+  cudaEventSynchronize(beg);
+  cudaEventSynchronize(end);
+  cudaEventElapsedTime(&elapsed_time, beg, end);
+  return elapsed_time;
 }
 
-// void runConv2dDoubleBuffering2(int M, int N, double *A, double *B) {
-//   // Settings for A6000
-//   const uint K12_NUM_THREADS = 128;
-//   const uint K12_BN = 128;
-//   const uint K12_BM = 128;
-//   const uint K12_BK = 16;
-//   const uint K12_WN = 64;
-//   const uint K12_WM = 64;
-//   const uint K12_WNITER = 4;
-//   const uint K12_TN = 4;
-//   const uint K12_TM = 8;
-//   dim3 blockDim(K12_NUM_THREADS);
-
-//   constexpr uint NUM_WARPS = K12_NUM_THREADS / 32;
-
-//   // warptile in threadblocktile
-//   static_assert((K12_BN % K12_WN == 0) and (K12_BM % K12_WM == 0));
-//   static_assert((K12_BN / K12_WN) * (K12_BM / K12_WM) == NUM_WARPS);
-
-//   // threads in warpsubtile
-//   static_assert((K12_WM * K12_WN) % (WARPSIZE * K12_TM * K12_TN * K12_WNITER) ==
-//                 0);
-//   constexpr uint K12_WMITER =
-//       (K12_WM * K12_WN) / (32 * K12_TM * K12_TN * K12_WNITER);
-//   // warpsubtile in warptile
-//   static_assert((K12_WM % K12_WMITER == 0) and (K12_WN % K12_WNITER == 0));
-
-//   static_assert((K12_NUM_THREADS * 4) % K12_BK == 0,
-//                 "NUM_THREADS*4 must be multiple of K9_BK to avoid quantization "
-//                 "issues during GMEM->SMEM tiling (loading only parts of the "
-//                 "final row of Bs during each iteraion)");
-//   static_assert((K12_NUM_THREADS * 4) % K12_BN == 0,
-//                 "NUM_THREADS*4 must be multiple of K9_BN to avoid quantization "
-//                 "issues during GMEM->SMEM tiling (loading only parts of the "
-//                 "final row of As during each iteration)");
-//   static_assert(K12_BN % (16 * K12_TN) == 0,
-//                 "BN must be a multiple of 16*TN to avoid quantization effects");
-//   static_assert(K12_BM % (16 * K12_TM) == 0,
-//                 "BM must be a multiple of 16*TM to avoid quantization effects");
-//   static_assert((K12_BM * K12_BK) % (4 * K12_NUM_THREADS) == 0,
-//                 "BM*BK must be a multiple of 4*256 to vectorize loads");
-//   static_assert((K12_BN * K12_BK) % (4 * K12_NUM_THREADS) == 0,
-//                 "BN*BK must be a multiple of 4*256 to vectorize loads");
-
-//   dim3 gridDim(CEIL_DIV(N, K12_BN), CEIL_DIV(M, K12_BM));
-//   // runConv2dDoubleBuffering2<K12_BM, K12_BN, K12_BK, K12_WM, K12_WN, K12_WNITER,
-//   //                          K12_TM, K12_TN, K12_NUM_THREADS>
-//   //     <<<gridDim, blockDim>>>(M, N, A, B);
-// }
-
-void run_kernel(int kernel_num, int M, int N, double *A, double *B) {
+float run_kernel(int kernel_num, int M, int N, double *A, double *B, int n_repeat=1) {
   switch (kernel_num) {
   // case 0:
   //   runCuDNNFP64(M, N, A, B);
   //   break;
   case 1:
-    run_conv2d_naive(M, N, A, B);
-    break;
+    return run_conv2d_naive(M, N, A, B, n_repeat);
   case 2:
-    run_conv2d_coalesce(M, N, A, B);
+    return run_conv2d_coalesce(M, N, A, B, n_repeat);
     break;  
   case 3:
-    run_conv2d_shared_mem_block(M, N,  A, B);
-    break;
+    return run_conv2d_shared_mem_block(M, N,  A, B, n_repeat);
   case 13:
-    run_conv2d_shared_mem_tma(M, N, A, B);
-    break;
+    return run_conv2d_shared_mem_tma(M, N, A, B, n_repeat);
   case 4:
-    runConv2d1DBlocktiling(M, N, A, B);
-    break;
+    return runConv2d1DBlocktiling(M, N, A, B, n_repeat);
   // case 5:
   //   runConv2d2DBlocktiling(M, N, A, B);
   //   break;
   case 6:
-    runConv2dVectorize(M, N, A, B);
-    break;
+    return runConv2dVectorize(M, N, A, B, n_repeat);
   // case 7:
   //   runConv2dResolveBankConflicts(M, N, A, B);
   //   break;
@@ -388,8 +430,7 @@ void run_kernel(int kernel_num, int M, int N, double *A, double *B) {
   //   runConv2dWarptiling(M, N, A, B);
   //   break;
   case 11:
-    runConv2dDoubleBuffering(M, N, A, B);
-    break;
+    return runConv2dDoubleBuffering(M, N, A, B, n_repeat);
   // case 12:
   //   runConv2dDoubleBuffering2(M, N, A, B);
   //   break;
