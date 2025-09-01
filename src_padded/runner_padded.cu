@@ -136,7 +136,7 @@ int div_ceil(int numerator, int denominator) {
   return res.rem ? (res.quot + 1) : res.quot;
 }
 
-float run_conv2d_naive(int M, int N, double *A, double *B) {
+float run_conv2d_naive(int M, int N, double *A, double *B, int n_repeat) {
   dim3 gridDim(M/32, N/32);
   dim3 blockDim(32, 32);
   // Using cudaEvent for gpu stream timing, cudaEvent is equivalent to
@@ -156,7 +156,7 @@ float run_conv2d_naive(int M, int N, double *A, double *B) {
   return elapsed_time;
 }
 
-float run_conv2d_coalesce(int M, int N, double *A, double *B) {
+float run_conv2d_coalesce(int M, int N, double *A, double *B, int n_repeat) {
   dim3 gridDim(CEIL_DIV(M, 32), CEIL_DIV(N, 32));
   dim3 blockDim(32, 32);
   // Using cudaEvent for gpu stream timing, cudaEvent is equivalent to
@@ -177,7 +177,7 @@ float run_conv2d_coalesce(int M, int N, double *A, double *B) {
   return elapsed_time;
 }
 
-float run_conv2d_shared_mem_block(int M, int N, double *A, double *B) {
+float run_conv2d_shared_mem_block(int M, int N, double *A, double *B, int n_repeat) {
   dim3 gridDim(CEIL_DIV(M, 32), CEIL_DIV(N, 32));
   dim3 blockDim(32 * 32);
   cudaFuncSetAttribute(conv2d_shared_mem_block<32>,
@@ -257,7 +257,7 @@ CUtensorMap get_tensor_map(double *A, const int M, const int N,
 
 }
 
-float run_conv2d_shared_mem_tma(int M, int N, double *A, double *B) {
+float run_conv2d_shared_mem_tma(int M, int N, double *A, double *B, int n_repeat) {
 
   const int BM = 32;
   const int BN = 32;
@@ -286,7 +286,7 @@ float run_conv2d_shared_mem_tma(int M, int N, double *A, double *B) {
   return elapsed_time;
 }
 
-float runConv2d1DBlocktiling(int M, int N, double *A, double *B) {
+float runConv2d1DBlocktiling(int M, int N, double *A, double *B, int n_repeat) {
   const uint BM = 256;
   const uint BN = 64;
   const uint TM = 16;
@@ -321,7 +321,7 @@ float runConv2d1DBlocktiling(int M, int N, double *A, double *B) {
   return elapsed_time;
 }
 
-float runConv2dVectorize(int M, int N, double *A, double *B) {
+float runConv2dVectorize(int M, int N, double *A, double *B, int n_repeat) {
 
   const uint BM = 256;
   const uint BN = 64;
@@ -356,7 +356,7 @@ float runConv2dVectorize(int M, int N, double *A, double *B) {
   return elapsed_time;
 }
 
-float runConv2dDoubleBuffering(int M, int N, double *A, double *B) {
+float runConv2dDoubleBuffering(int M, int N, double *A, double *B, int n_repeat) {
 
   const uint BM = 128;
   const uint BN = 128;
@@ -396,7 +396,7 @@ float runConv2dDoubleBuffering(int M, int N, double *A, double *B) {
   return elapsed_time;
 }
 
-float run_kernel(int kernel_num, int M, int N, double *A, double *B, int n_repeat=1) {
+float run_kernel(int kernel_num, int M, int N, double *A, double *B, int n_repeat) {
   switch (kernel_num) {
   // case 0:
   //   runCuDNNFP64(M, N, A, B);
