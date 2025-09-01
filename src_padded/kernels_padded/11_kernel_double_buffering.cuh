@@ -48,10 +48,10 @@ __global__ void conv2dDoubleBuffering(const __grid_constant__ CUtensorMap tensor
   __syncthreads();
   barrier::arrival_token token[2];
   if (threadIdx.x == 0) {
-    cde::cp_async_bulk_tensor_2d_global_to_shared(As[0], &tensor_map_a, cCol * BN, cRow * BM, bar[0]);
-    token[0] = cuda::device::barrier_arrive_tx(bar[0], 1, (ROWS_PER_BLOCK+2) * (BN+2) * sizeof(double));
+    cde::cp_async_bulk_tensor_2d_global_to_shared(As[0], &tensor_map_a, cCol * BN, cRow * BM, bar_a[0]);
+    token[0] = cuda::device::barrier_arrive_tx(bar_a[0], 1, (ROWS_PER_BLOCK+2) * (BN+2) * sizeof(double));
   } else {
-    token[0] = bar[0].arrive();
+    token[0] = bar_a[0].arrive();
   }
 
   const int threadRow = threadIdx.x / BN;
@@ -61,7 +61,7 @@ __global__ void conv2dDoubleBuffering(const __grid_constant__ CUtensorMap tensor
             -1.0, 8.0, -1.0,
             -1.0, -1.0, -1.0};  
 
-  bar[0].wait(std::move(token[0]));
+  bar_a[0].wait(std::move(token[0]));
 
   // TODO: Initiate TMA setup for sending Bs back to global memory
   for (int i = ROWS_PER_BLOCK; i < BM; i += ROWS_PER_BLOCK) {
@@ -111,7 +111,7 @@ __global__ void conv2dDoubleBuffering(const __grid_constant__ CUtensorMap tensor
 
   if (threadIdx.x == 0) {
     for (int i = 0; i < 2; i++)
-      (&bar[i])->~barrier();
+      (&bar_a[i])->~barrier();
   }
 
 }
