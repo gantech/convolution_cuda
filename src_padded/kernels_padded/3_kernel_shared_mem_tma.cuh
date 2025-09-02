@@ -36,7 +36,6 @@ __global__ void conv2d_shared_mem_tma(const __grid_constant__ CUtensorMap tensor
   // Initialize shared memory barrier with the number of threads participating in the barrier.
   #pragma nv_diag_suppress static_var_with_dynamic_init
   __shared__ barrier bar;
-
   if (threadIdx.x == 0) {
     // Initialize barrier. All `blockDim.x` threads in block participate.
     init(&bar, blockDim.x);
@@ -58,7 +57,7 @@ __global__ void conv2d_shared_mem_tma(const __grid_constant__ CUtensorMap tensor
   }
   // Wait for the data to have arrived.
   bar.wait(std::move(token));
-  
+
   double tmp = 0.0;
   for (int fi = -1 ; fi < 2; fi++) {
     for (int fj = -1; fj < 2; fj++) { 

@@ -224,7 +224,7 @@ CUtensorMap get_tensor_map(double *A, const int M, const int N,
   uint64_t stride[rank - 1] = {(N) * sizeof(double)};
   // The box_size is the size of the shared memory buffer that is used as the
   // destination of a TMA transfer.
-  uint32_t box_size[rank] = {BM, BN};
+  uint32_t box_size[rank] = {BN, BM};
   // The distance between elements in units of sizeof(element). A stride of 2
   // can be used to load only the real component of a complex-valued tensor, for instance.
   uint32_t elem_stride[rank] = {1, 1};
@@ -324,9 +324,9 @@ float runConv2d1DBlocktiling(int M, int N, double *A, double *B, int n_repeat) {
 
 float runConv2dVectorize(int M, int N, double *A, double *B, int n_repeat) {
 
-  const uint BM = 128;
-  const uint BN = 128;
-  const uint TM = 16;
+  const uint BM = 32;
+  const uint BN = 256;
+  const uint TM = 8;
   dim3 gridDim(CEIL_DIV(N, BN), CEIL_DIV(M, BM));
 
   // Add extra storage to ensure 128-byte alignment
@@ -361,13 +361,13 @@ float runConv2dDoubleBuffering(int M, int N, double *A, double *B, int n_repeat)
 
   const uint BM = 128;
   const uint BN = 128;
-  const uint ROWS_PER_BLOCK = 4;
+  const uint ROWS_PER_BLOCK = 8;
 
   // Add extra storage to ensure 128-byte alignment
   // int smem_bytes = (CEIL_DIV((ROWS_PER_BLOCK + 2) * (BN + 2) , 16) + 1) * 16 * 8;
-  int smem_bytes = 3072 * 8;
+  int smem_bytes = 2048 * 3 * sizeof(double);
   // Set max shared memory for the device
-  cudaFuncSetAttribute(conv2d1DBlocktiling<BM, BN, ROWS_PER_BLOCK>, 
+  cudaFuncSetAttribute(conv2dDoubleBuffering<BM, BN, ROWS_PER_BLOCK>, 
       cudaFuncAttributeMaxDynamicSharedMemorySize, 
       smem_bytes);
   // There are BM * BN elements to be calculated by this block. 

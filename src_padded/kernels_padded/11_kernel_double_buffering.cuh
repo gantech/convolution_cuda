@@ -29,10 +29,10 @@ __global__ void conv2dDoubleBuffering(const __grid_constant__ CUtensorMap tensor
 
   double* As[2] ;
   As[0] = reinterpret_cast<double*>(shared_mem);
-  As[1] = As[0] + 1024;
+  As[1] = As[0] + 2048;
 
-  double* Bs[2] = {As[0] + 2048,
-                   As[0] + 2560};
+  double* Bs[2] = {As[0] + 4096,
+                   As[0] + 5120};
 
   // Initialize shared memory barrier with the number of threads participating in the barrier.
   #pragma nv_diag_suppress static_var_with_dynamic_init
@@ -63,18 +63,18 @@ __global__ void conv2dDoubleBuffering(const __grid_constant__ CUtensorMap tensor
 
   bar_a[0].wait(std::move(token[0]));
 
-  // TODO: Initiate TMA setup for sending Bs back to global memory
-  for (int i = ROWS_PER_BLOCK; i < BM; i += ROWS_PER_BLOCK) {
+  for (int i = ROWS_PER_BLOCK; i < (BM+1); i += ROWS_PER_BLOCK) {
 
     int idx = (i / ROWS_PER_BLOCK) % 2;
 
-    if (threadIdx.x == 0) {
-      cde::cp_async_bulk_tensor_2d_global_to_shared(As[idx], &tensor_map_a, cCol * BN, cRow * BM + i, bar_a[idx]);
-      token[idx] = cuda::device::barrier_arrive_tx(bar_a[idx], 1,  (ROWS_PER_BLOCK+2) * (BN+2) * sizeof(double));
-    } else {
-      token[idx] = bar_a[idx].arrive();
+    if (i < BM) {
+      if (threadIdx.x == 0) {
+        cde::cp_async_bulk_tensor_2d_global_to_shared(As[idx], &tensor_map_a, cCol * BN, cRow * BM + i, bar_a[idx]);
+        token[idx] = cuda::device::barrier_arrive_tx(bar_a[idx], 1,  (ROWS_PER_BLOCK+2) * (BN+2) * sizeof(double));
+      } else {
+        token[idx] = bar_a[idx].arrive();
+      }
     }
-
     int idx_prev = idx ^ 1;
 
     double tmp = 0.0;
@@ -103,9 +103,10 @@ __global__ void conv2dDoubleBuffering(const __grid_constant__ CUtensorMap tensor
       cde::cp_async_bulk_wait_group_read<0>();
     }
 
-    // Receive data from global memory
-    bar_a[idx].wait(std::move(token[idx]));
-
+    if (i < BM) {
+     // Receive data from global memory
+     bar_a[idx].wait(std::move(token[idx]));
+    }
 
   }
 
