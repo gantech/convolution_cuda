@@ -178,10 +178,11 @@ void runCuDNNFP64(int H, int W, double *d_input, double *d_output) {
 
     long flops = 9 * H * W;
     printf(
-        "Average elapsed time: (%7.6f) s, performance: (%7.1f) GFLOPS. size: "
+        "Average elapsed time: (%7.6f) s, performance: (%7.1f) GFLOPS, (%7.1f) GB/s. size: "
         "(%ld).\n",
         elapsed_time / 50,
-        (50 * flops * 1e-9) / elapsed_time, H);
+        (50 * flops * 1e-9) / elapsed_time,
+        (50 * 2.0 * H * H * 8.0) * 1e-9 / elapsed_time, H);
     fflush(stdout);
 
 }

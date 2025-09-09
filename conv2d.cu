@@ -120,10 +120,11 @@ int main(int argc, char **argv) {
 
       long flops = 9 * m * n;
       printf(
-          "Average elapsed time: (%7.6f) s, performance: (%7.1f) GFLOPS. size: "
+          "Average elapsed time: (%7.6f) s, performance: (%7.1f) GFLOPS, (%7.1f) GB/s size: "
           "(%ld).\n",
           elapsed_time / repeat_times,
-          (repeat_times * flops * 1e-9) / elapsed_time, m);
+          (repeat_times * flops * 1e-9) / elapsed_time,
+          (repeat_times * 2.0 * m * m * 8.0) * 1e-9 / elapsed_time, m);
       fflush(stdout);
       // make dB and dB_ref equal again (we modified dB while calling our kernel
       // for benchmarking)
