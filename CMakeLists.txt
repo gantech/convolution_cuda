@@ -24,7 +24,7 @@ aux_source_directory(${PROJECT_SOURCE_DIR}/src SRC)
 
 
 # generate executable
-add_executable(conv2d_padded conv2d.cu ${SRC})
+add_executable(conv2d conv2d.cu ${SRC})
 target_include_directories(conv2d PRIVATE ${CUDA_CUDNN_DIR}/include)
 set_target_properties(conv2d PROPERTIES CUDA_ARCHITECTURES ${CUDA_COMPUTE_CAPABILITY})
 target_link_directories(conv2d PRIVATE ${CUDA_CUDNN_DIR}/lib)
