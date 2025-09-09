@@ -1,0 +1,9 @@
+# KernelNumber, Description, Time, GFLOPs, GB/s
+0,   CUDNN,                          0.009446,   16.0,   28.4
+1,   Naive,                          0.000327,  462.0,  821.4
+2,   Global Memory Coalescing,       0.000125, 1207.7, 2147.0
+3,   Shared Memory Caching,          0.000146, 1032.7, 1835.8
+4,   1D Tiling,                      0.000126, 1195.3, 2125.0
+6,   Vectorized memory access,       0.000101, 1501.0, 2668.4
+11,  Double Buffering TMA,           0.000132, 1141.4, 2029.1
+13,  Shared Memory TMA,              0.000146, 1032.8, 1836.0
